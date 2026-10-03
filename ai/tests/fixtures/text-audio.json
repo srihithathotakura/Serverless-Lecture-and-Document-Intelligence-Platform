@@ -1,0 +1,26 @@
+{
+  "documentId": "fixture-audio-0001",
+  "sourceType": "audio",
+  "segments": [
+    {"text": "Welcome to today's lecture on photosynthesis and plant biology.", "startSec": 0.0, "endSec": 30.0},
+    {"text": "Photosynthesis is the process by which plants convert light energy into chemical energy.", "startSec": 30.0, "endSec": 60.0},
+    {"text": "This process occurs mainly in the chloroplasts of plant cells.", "startSec": 60.0, "endSec": 90.0},
+    {"text": "Chlorophyll is the green pigment that absorbs sunlight for photosynthesis.", "startSec": 90.0, "endSec": 120.0},
+    {"text": "The overall equation involves carbon dioxide, water, and light producing glucose and oxygen.", "startSec": 120.0, "endSec": 150.0},
+    {"text": "There are two main stages: the light dependent reactions and the Calvin cycle.", "startSec": 150.0, "endSec": 180.0},
+    {"text": "Light dependent reactions occur in the thylakoid membrane of the chloroplast.", "startSec": 180.0, "endSec": 210.0},
+    {"text": "During these reactions, water molecules are split, releasing oxygen as a byproduct.", "startSec": 210.0, "endSec": 240.0},
+    {"text": "ATP and NADPH are produced during the light dependent reactions.", "startSec": 240.0, "endSec": 270.0},
+    {"text": "The Calvin cycle takes place in the stroma of the chloroplast.", "startSec": 270.0, "endSec": 300.0},
+    {"text": "Carbon dioxide is fixed into organic molecules during the Calvin cycle.", "startSec": 300.0, "endSec": 330.0},
+    {"text": "This process uses the ATP and NADPH generated earlier to build glucose.", "startSec": 330.0, "endSec": 360.0},
+    {"text": "Photosynthesis is essential for life on Earth because it produces oxygen.", "startSec": 360.0, "endSec": 390.0},
+    {"text": "It also forms the base of most food chains by producing organic compounds.", "startSec": 390.0, "endSec": 420.0},
+    {"text": "Factors affecting photosynthesis include light intensity, temperature, and carbon dioxide levels.", "startSec": 420.0, "endSec": 450.0},
+    {"text": "At low light intensity, the rate of photosynthesis is limited by available light.", "startSec": 450.0, "endSec": 480.0},
+    {"text": "Temperature affects enzyme activity involved in the Calvin cycle reactions.", "startSec": 480.0, "endSec": 510.0},
+    {"text": "Plants have adapted various mechanisms to maximize photosynthetic efficiency.", "startSec": 510.0, "endSec": 540.0},
+    {"text": "Some plants use a different pathway called C4 photosynthesis for hot climates.", "startSec": 540.0, "endSec": 570.0},
+    {"text": "In summary, photosynthesis converts solar energy into chemical energy stored in glucose.", "startSec": 570.0, "endSec": 600.0}
+  ]
+}
