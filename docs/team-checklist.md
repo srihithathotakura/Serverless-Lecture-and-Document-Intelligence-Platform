@@ -6,5 +6,5 @@ Tick your row after your setup-check PR is merged.
 | --- | --- |
 | M1 | [ ] |
 | M2 | [ ] |
-| M3 | [ ] |
+| M3 | [x] |
 | M4 | [ ] |
