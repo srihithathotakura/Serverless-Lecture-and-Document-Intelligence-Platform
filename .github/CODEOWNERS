@@ -3,8 +3,15 @@
 /infra/     @srihithathotakura @nandanreddy386
 /.github/   @srihithathotakura @nandanreddy386
 /samples/   @srihithathotakura @nandanreddy386
+/requirements-dev.txt @srihithathotakura @nandanreddy386
+/ruff.toml  @srihithathotakura @nandanreddy386
+/pytest.ini @srihithathotakura @nandanreddy386
 /auth/      @nandanreddy386 @srihithathotakura
 /api/       @nandanreddy386 @srihithathotakura
 /frontend/  @nandanreddy386 @srihithathotakura
 /docs/      @nandanreddy386 @srihithathotakura
 /tests/     @nandanreddy386 @srihithathotakura
+/docs/perf/ @srihithathotakura @Yuvahasini
+/docs/report/section-m1.md @Yuvahasini @nandanreddy386
+/docs/report/section-m2.md @avkbsurya119 @nandanreddy386
+/docs/report/section-m3.md @srihithathotakura @nandanreddy386

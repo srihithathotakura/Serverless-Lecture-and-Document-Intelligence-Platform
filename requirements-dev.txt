@@ -1,4 +1,7 @@
-ruff
 pytest
+moto[s3,dynamodb,ssm]
 boto3
-moto
+pypdf
+ruff
+cfn-lint
+aws-sam-cli
