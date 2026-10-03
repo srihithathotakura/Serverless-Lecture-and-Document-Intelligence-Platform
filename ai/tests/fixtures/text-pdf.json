@@ -1,0 +1,14 @@
+{
+  "documentId": "fixture-pdf-0001",
+  "sourceType": "pdf",
+  "segments": [
+    {"text": "Chapter 1: Introduction to Cloud Computing. Cloud computing delivers computing services over the internet, including servers, storage, databases, and software.", "page": 1},
+    {"text": "Chapter 2: Service Models. The three main service models are Infrastructure as a Service, Platform as a Service, and Software as a Service.", "page": 2},
+    {"text": "Chapter 3: Deployment Models. Cloud deployments can be public, private, hybrid, or multi-cloud depending on organizational needs.", "page": 3},
+    {"text": "Chapter 4: Serverless Computing. Serverless computing allows developers to build applications without managing servers directly.", "page": 4},
+    {"text": "Chapter 5: AWS Lambda. AWS Lambda runs code in response to events and automatically manages the underlying compute resources.", "page": 5},
+    {"text": "Chapter 6: Storage Services. Amazon S3 provides object storage with high durability and availability for any amount of data.", "page": 6},
+    {"text": "Chapter 7: Database Services. DynamoDB is a fully managed NoSQL database service that provides fast and predictable performance.", "page": 7},
+    {"text": "Chapter 8: Security Best Practices. Identity and access management ensures only authorized users and services can access cloud resources.", "page": 8}
+  ]
+}
