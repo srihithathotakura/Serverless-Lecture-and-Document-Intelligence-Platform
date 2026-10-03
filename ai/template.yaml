@@ -1,0 +1,19 @@
+Transform: AWS::Serverless-2016-10-31
+
+Parameters:
+  Stage:
+    Type: String
+  TextModelId:
+    Type: String
+  MantleBaseUrl:
+    Type: String
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Handler: app.lambda_handler
+    MemorySize: 512
+    Environment:
+      Variables:
+        STAGE: !Ref Stage
+        DATA_BUCKET: { 'Fn::ImportValue': !Sub 'lecdoc-${Stage}-DataBucketName' }
