@@ -1,0 +1,9 @@
+.aws-sam/
+node_modules/
+dist/
+__pycache__/
+.env
+*.env
+frontend/app/public/config.js
+.venv/
+*.pyc
