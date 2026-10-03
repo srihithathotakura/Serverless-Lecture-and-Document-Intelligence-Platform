@@ -1,0 +1,7 @@
+{
+  "region": "us-east-1",
+  "alertEmail": "change-me@example.com",
+  "textModelId": "google.gemma-3-4b-it",
+  "sttModelId": "FILL-FROM-check_stt.sh",
+  "mantleBaseUrl": "https://bedrock-mantle.us-east-1.api.aws/v1"
+}

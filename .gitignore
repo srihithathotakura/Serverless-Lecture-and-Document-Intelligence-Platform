@@ -2,8 +2,12 @@
 node_modules/
 dist/
 __pycache__/
+.pytest_cache/
+.ruff_cache/
 .env
 *.env
+*.pem
+out.json
 frontend/app/public/config.js
 .venv/
 *.pyc
