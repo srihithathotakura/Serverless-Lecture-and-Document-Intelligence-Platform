@@ -1,0 +1,647 @@
+{
+  "Comment": "lecdoc pipeline: S3 upload -> text (audio windows or PDF) -> chunk, summarize, index -> status",
+  "StartAt": "ParseEvent",
+  "TimeoutSeconds": 3600,
+  "States": {
+    "ParseEvent": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${ParseEventFnArn}",
+        "Payload.$": "$"
+      },
+      "OutputPath": "$.Payload",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "ThrottlingException"
+          ],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 4,
+          "BackoffRate": 2
+        },
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 3,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Next": "ShouldSkip"
+    },
+    "ShouldSkip": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.skip",
+          "BooleanEquals": true,
+          "Next": "Done"
+        }
+      ],
+      "Default": "ChooseType"
+    },
+    "ChooseType": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.fileType",
+          "StringEquals": "audio",
+          "Next": "SplitAudio"
+        },
+        {
+          "Variable": "$.fileType",
+          "StringEquals": "pdf",
+          "Next": "ExtractPdf"
+        }
+      ],
+      "Default": "FailState"
+    },
+    "SplitAudio": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${SplitAudioFnArn}",
+        "Payload": {
+          "userId.$": "$.userId",
+          "documentId.$": "$.documentId",
+          "bucket.$": "$.bucket",
+          "s3Key.$": "$.s3Key"
+        }
+      },
+      "ResultSelector": {
+        "windows.$": "$.Payload.windows"
+      },
+      "ResultPath": "$.split",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "ThrottlingException"
+          ],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 4,
+          "BackoffRate": 2
+        },
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 3,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "MarkFailed"
+        }
+      ],
+      "Next": "TranscribeWindows"
+    },
+    "TranscribeWindows": {
+      "Type": "Map",
+      "ItemsPath": "$.split.windows",
+      "MaxConcurrency": 2,
+      "ItemSelector": {
+        "userId.$": "$.userId",
+        "documentId.$": "$.documentId",
+        "bucket.$": "$.bucket",
+        "window.$": "$$.Map.Item.Value"
+      },
+      "ItemProcessor": {
+        "ProcessorConfig": {
+          "Mode": "INLINE"
+        },
+        "StartAt": "TranscribeWindow",
+        "States": {
+          "TranscribeWindow": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke",
+            "Parameters": {
+              "FunctionName": "${TranscribeWindowFnArn}",
+              "Payload.$": "$"
+            },
+            "ResultSelector": {
+              "startSec.$": "$.Payload.startSec",
+              "endSec.$": "$.Payload.endSec",
+              "text.$": "$.Payload.text"
+            },
+            "Retry": [
+              {
+                "ErrorEquals": [
+                  "ThrottlingException"
+                ],
+                "IntervalSeconds": 5,
+                "MaxAttempts": 4,
+                "BackoffRate": 2
+              },
+              {
+                "ErrorEquals": [
+                  "Lambda.ServiceException",
+                  "Lambda.AWSLambdaException",
+                  "Lambda.SdkClientException",
+                  "Lambda.TooManyRequestsException"
+                ],
+                "IntervalSeconds": 3,
+                "MaxAttempts": 3,
+                "BackoffRate": 2
+              }
+            ],
+            "End": true
+          }
+        }
+      },
+      "ResultPath": "$.windowResults",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "MarkFailed"
+        }
+      ],
+      "Next": "AssembleAudioText"
+    },
+    "AssembleAudioText": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${AssembleAudioTextFnArn}",
+        "Payload": {
+          "userId.$": "$.userId",
+          "documentId.$": "$.documentId",
+          "bucket.$": "$.bucket",
+          "windows.$": "$.windowResults"
+        }
+      },
+      "ResultSelector": {
+        "textKey.$": "$.Payload.textKey",
+        "segmentCount.$": "$.Payload.segmentCount"
+      },
+      "ResultPath": "$.text",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "ThrottlingException"
+          ],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 4,
+          "BackoffRate": 2
+        },
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 3,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "MarkFailed"
+        }
+      ],
+      "Next": "StepChunking"
+    },
+    "ExtractPdf": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${ExtractPdfFnArn}",
+        "Payload": {
+          "userId.$": "$.userId",
+          "documentId.$": "$.documentId",
+          "bucket.$": "$.bucket",
+          "s3Key.$": "$.s3Key"
+        }
+      },
+      "ResultSelector": {
+        "textKey.$": "$.Payload.textKey",
+        "segmentCount.$": "$.Payload.segmentCount"
+      },
+      "ResultPath": "$.text",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "ThrottlingException"
+          ],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 4,
+          "BackoffRate": 2
+        },
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 3,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "MarkFailed"
+        }
+      ],
+      "Next": "StepChunking"
+    },
+    "StepChunking": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${UpdateStatusFnArn}",
+        "Payload": {
+          "userId.$": "$.userId",
+          "documentId.$": "$.documentId",
+          "status": "PROCESSING",
+          "step": "CHUNKING"
+        }
+      },
+      "ResultPath": null,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "ThrottlingException"
+          ],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 4,
+          "BackoffRate": 2
+        },
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 3,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "MarkFailed"
+        }
+      ],
+      "Next": "Chunk"
+    },
+    "Chunk": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${ChunkFnArn}",
+        "Payload": {
+          "userId.$": "$.userId",
+          "documentId.$": "$.documentId",
+          "bucket.$": "$.bucket",
+          "textKey.$": "$.text.textKey"
+        }
+      },
+      "ResultSelector": {
+        "chunksKey.$": "$.Payload.chunksKey",
+        "chunkCount.$": "$.Payload.chunkCount"
+      },
+      "ResultPath": "$.chunk",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "ThrottlingException"
+          ],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 4,
+          "BackoffRate": 2
+        },
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 3,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "MarkFailed"
+        }
+      ],
+      "Next": "StepSummarizing"
+    },
+    "StepSummarizing": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${UpdateStatusFnArn}",
+        "Payload": {
+          "userId.$": "$.userId",
+          "documentId.$": "$.documentId",
+          "status": "PROCESSING",
+          "step": "SUMMARIZING"
+        }
+      },
+      "ResultPath": null,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "ThrottlingException"
+          ],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 4,
+          "BackoffRate": 2
+        },
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 3,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "MarkFailed"
+        }
+      ],
+      "Next": "Summarize"
+    },
+    "Summarize": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${SummarizeFnArn}",
+        "Payload": {
+          "userId.$": "$.userId",
+          "documentId.$": "$.documentId",
+          "bucket.$": "$.bucket",
+          "chunksKey.$": "$.chunk.chunksKey"
+        }
+      },
+      "ResultSelector": {
+        "summary.$": "$.Payload.summary"
+      },
+      "ResultPath": "$.summary",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "ThrottlingException"
+          ],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 4,
+          "BackoffRate": 2
+        },
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 3,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "MarkFailed"
+        }
+      ],
+      "Next": "StepIndexing"
+    },
+    "StepIndexing": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${UpdateStatusFnArn}",
+        "Payload": {
+          "userId.$": "$.userId",
+          "documentId.$": "$.documentId",
+          "status": "PROCESSING",
+          "step": "INDEXING"
+        }
+      },
+      "ResultPath": null,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "ThrottlingException"
+          ],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 4,
+          "BackoffRate": 2
+        },
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 3,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "MarkFailed"
+        }
+      ],
+      "Next": "Index"
+    },
+    "Index": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${IndexFnArn}",
+        "Payload": {
+          "userId.$": "$.userId",
+          "documentId.$": "$.documentId",
+          "bucket.$": "$.bucket",
+          "chunksKey.$": "$.chunk.chunksKey",
+          "fileName.$": "$.fileName"
+        }
+      },
+      "ResultSelector": {
+        "indexKey.$": "$.Payload.indexKey",
+        "chunkCount.$": "$.Payload.chunkCount"
+      },
+      "ResultPath": "$.index",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "ThrottlingException"
+          ],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 4,
+          "BackoffRate": 2
+        },
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 3,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "MarkFailed"
+        }
+      ],
+      "Next": "MarkDone"
+    },
+    "MarkDone": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${UpdateStatusFnArn}",
+        "Payload": {
+          "userId.$": "$.userId",
+          "documentId.$": "$.documentId",
+          "status": "DONE",
+          "summary.$": "$.summary.summary",
+          "chunkCount.$": "$.chunk.chunkCount"
+        }
+      },
+      "ResultPath": null,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "ThrottlingException"
+          ],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 4,
+          "BackoffRate": 2
+        },
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 3,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "MarkFailed"
+        }
+      ],
+      "Next": "Done"
+    },
+    "MarkFailed": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${UpdateStatusFnArn}",
+        "Payload": {
+          "userId.$": "$.userId",
+          "documentId.$": "$.documentId",
+          "status": "FAILED",
+          "errorMessage.$": "$.error.Cause"
+        }
+      },
+      "ResultPath": null,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "ThrottlingException"
+          ],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 4,
+          "BackoffRate": 2
+        },
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 3,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Next": "FailState"
+    },
+    "Done": {
+      "Type": "Succeed"
+    },
+    "FailState": {
+      "Type": "Fail",
+      "Error": "PipelineFailed"
+    }
+  }
+}

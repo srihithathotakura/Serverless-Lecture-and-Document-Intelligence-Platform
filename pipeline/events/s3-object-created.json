@@ -1,0 +1,3 @@
+{"version":"0","source":"aws.s3","detail-type":"Object Created",
+ "detail":{"bucket":{"name":"lecdoc-dev-data-REPLACE_ACCOUNT_ID"},
+           "object":{"key":"uploads/user-A/REPLACE_WITH_DOCUMENT_ID/a.wav","size":1920044}}}
