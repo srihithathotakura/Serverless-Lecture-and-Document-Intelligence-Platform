@@ -1,0 +1,2 @@
+{"requestContext":{"authorizer":{"jwt":{"claims":{"sub":"user-B"}}}},
+ "pathParameters":{"documentId":"REPLACE_WITH_DOCUMENT_ID"}}

@@ -1,0 +1,6 @@
+extend = "../ruff.toml"
+
+[lint]
+# Doc 0 section 9.7: permanent failures raise a plain Exception (Step Functions does not retry them).
+# extract-pdf wraps any pypdf error into one readable message on purpose.
+extend-ignore = ["TRY002", "BLE001"]
