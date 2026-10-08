@@ -2,6 +2,7 @@ import json
 import os
 import re
 from collections import defaultdict
+
 import boto3
 
 s3 = boto3.client("s3")
