@@ -142,6 +142,8 @@ environment variable, the template or Git.
 - PDF: text PDFs only, up to 20 pages, not encrypted. Scanned PDFs fail with a clear message.
 - Upload size: 50 MB in the frontend, 100 MB hard limit in parse-event.
 - Window cuts at fixed 30 s can split words.
+- The speech prompt says the audio is English. Without that, the model answered an English sample in
+  German, so other languages are not supported.
 
 ## 10. Performance
 
@@ -149,12 +151,23 @@ Measured in the dev account, one run per file (see `docs/perf/pipeline-timings.c
 
 | File | Length | Processing time (s) |
 | --- | --- | --- |
-| audio | 1 min | TODO |
-| audio | 3 min | TODO |
-| audio | 5 min | TODO |
-| pdf | 2 pages | TODO |
-| pdf | 10 pages | TODO |
-| pdf | 20 pages | TODO |
+| audio | 1 min | 7.2 |
+| audio | 3 min | 6.9 |
+| audio | 5 min (4.9) | 10.8 |
+| pdf | 2 pages | 4.8 |
+| pdf | 10 pages | 3.0 |
+| pdf | 20 pages | 3.5 |
+
+Processing time is `processingMs` (DONE time minus `startedAt`), so it covers the whole state machine:
+text extraction or transcription, chunk, summarize (Gemma call) and index. It does not include the
+browser upload.
+
+- Audio time grows slowly with length because the Map state transcribes two 30 s windows at a time:
+  the 5-minute file has 10 windows but finishes in about 11 s. The 1-minute run was slower than the
+  3-minute one because it was the first run after a deploy (Lambda cold starts).
+- PDF time hardly depends on page count. pypdf reads 20 pages in well under a second, so most of the
+  time is the summary call and the Step Functions transitions.
+- Every file finishes far below the 3600 s state machine timeout and the 15-minute Lambda limit.
 
 ## 11. Testing
 
@@ -163,5 +176,11 @@ Measured in the dev account, one run per file (see `docs/perf/pipeline-timings.c
   neighbours, duplicate event skipped, error Cause parsing, WAV splitting (stereo 44.1 kHz 65 s gives
   3 mono 16 kHz windows; a 301 s file and junk bytes are rejected), PDF extraction (empty, encrypted,
   over 20 pages, not a PDF), HTTP error mapping to ThrottlingException, and the state machine wiring.
-- Manual failure runs (week 4): 0-byte .wav, text file renamed .pdf, 6-minute WAV, scanned PDF. Each one
-  ends FAILED with a readable message.
+- End-to-end runs in the dev account with all six sample files: every one reached DONE with a summary.
+- Manual failure runs in the dev account, each ending FAILED with a readable message:
+  0-byte .wav ("Unsupported WAV file (need 16-bit PCM). Convert with: ffmpeg ..."), a text file
+  renamed .pdf ("Could not read PDF"), a 6-minute WAV ("Audio longer than 5 minutes") and the scanned
+  sample PDF ("No text found. PDF may be scanned images").
+- Isolation and CRUD in the dev account: user B lists 0 documents and gets 404 on get and delete of
+  user A's document; delete by the owner returns 200 and leaves 0 objects under `uploads/` and
+  `processed/`; create-upload with `.mp3` returns 400.
