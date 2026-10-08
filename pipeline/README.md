@@ -56,6 +56,6 @@ For a PDF use `events/create-upload-pdf.json` and `-H "Content-Type: application
 ## Speech request format
 
 `stt_transcribe()` in `src/transcribe_window/app.py` is the only place that knows the speech call.
-It uses the OpenAI-compatible multipart `POST /audio/transcriptions` (fields `model`, `file`), reading
-`text` from the response. Check it against `infra/checks/check_stt.sh` and change only that function if
-the format differs.
+It copies the request from `infra/checks/check_stt.sh`: `POST /chat/completions` with the window as
+base64 `input_audio` (format `wav`) plus a "transcribe exactly" instruction, `max_tokens` 400, reading the
+transcript from `choices[0].message.content`. If the check script changes, change only that function.

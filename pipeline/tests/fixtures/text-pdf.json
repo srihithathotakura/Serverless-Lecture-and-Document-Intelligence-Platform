@@ -1,0 +1,14 @@
+{
+  "documentId": "fixture-pdf-0001",
+  "sourceType": "pdf",
+  "segments": [
+    {
+      "text": "Lecture notes page one. Serverless computing runs code without managing servers.",
+      "page": 1
+    },
+    {
+      "text": "Page two. AWS Step Functions coordinates Lambda functions into a workflow.",
+      "page": 2
+    }
+  ]
+}
