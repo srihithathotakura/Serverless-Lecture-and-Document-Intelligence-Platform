@@ -13,32 +13,67 @@ Globals:
     Runtime: python3.12
     Handler: app.lambda_handler
     MemorySize: 512
+    Timeout: 30
     Environment:
       Variables:
         STAGE: !Ref Stage
         DATA_BUCKET: { 'Fn::ImportValue': !Sub 'lecdoc-${Stage}-DataBucketName' }
+        TEXT_MODEL_ID: !Ref TextModelId
+        MANTLE_BASE_URL: !Ref MantleBaseUrl
+        BEDROCK_SSM_PARAM: !Sub '/lecdoc/${Stage}/bedrock-api-key'
 
 Resources:
   ChunkFn:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: src/chunk/
+      Policies:
+        - S3CrudPolicy:
+            BucketName: { 'Fn::ImportValue': !Sub 'lecdoc-${Stage}-DataBucketName' }
+
   SummarizeFn:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: src/summarize/
+      Policies:
+        - S3CrudPolicy:
+            BucketName: { 'Fn::ImportValue': !Sub 'lecdoc-${Stage}-DataBucketName' }
+        - Statement:
+            - Effect: Allow
+              Action: ssm:GetParameter
+              Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/lecdoc/${Stage}/bedrock-api-key'
+
   IndexFn:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: src/index/
+      Policies:
+        - S3CrudPolicy:
+            BucketName: { 'Fn::ImportValue': !Sub 'lecdoc-${Stage}-DataBucketName' }
+
   QaFn:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: src/qa/
+      Policies:
+        - S3CrudPolicy:
+            BucketName: { 'Fn::ImportValue': !Sub 'lecdoc-${Stage}-DataBucketName' }
+        - Statement:
+            - Effect: Allow
+              Action: ssm:GetParameter
+              Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/lecdoc/${Stage}/bedrock-api-key'
+
   SpeakFn:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: src/speak/
+      Policies:
+        - S3CrudPolicy:
+            BucketName: { 'Fn::ImportValue': !Sub 'lecdoc-${Stage}-DataBucketName' }
+        - Statement:
+            - Effect: Allow
+              Action: polly:SynthesizeSpeech
+              Resource: '*'
 
 Outputs:
   ChunkFnArn:
