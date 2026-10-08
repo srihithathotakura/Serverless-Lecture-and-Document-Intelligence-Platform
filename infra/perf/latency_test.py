@@ -2,7 +2,11 @@
 """API latency test (stdlib only).
 usage: API_URL=https://xxx.execute-api.us-east-1.amazonaws.com ID_TOKEN=<cognito id token> python3 infra/perf/latency_test.py
 Runs 50 sequential GET /documents, 5 parallel batches of 10, and 5 POST /ask calls."""
-import json, os, statistics, time, urllib.request
+import json
+import os
+import statistics
+import time
+import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
 URL = os.environ["API_URL"].rstrip("/")
@@ -26,7 +30,7 @@ def call(method, path, body=None):
 def report(name, rows):
     ms = sorted(r[0] for r in rows)
     errs = sum(1 for r in rows if r[1] >= 400)
-    p95 = ms[min(len(ms) - 1, int(round(0.95 * len(ms))) - 1)]
+    p95 = ms[min(len(ms) - 1, round(0.95 * len(ms)) - 1)]
     print(f"| {name} | {len(ms)} | {statistics.median(ms):.0f} | {p95:.0f} | {max(ms):.0f} | {errs} |")
 
 
