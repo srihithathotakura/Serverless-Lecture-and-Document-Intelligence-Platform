@@ -4,8 +4,8 @@ import urllib.request
 
 import boto3
 
-s3 = boto3.client("s3")
-ssm = boto3.client("ssm")
+s3 = boto3.client("s3", region_name=os.environ.get("AWS_REGION", "us-east-1"))
+ssm = boto3.client("ssm", region_name=os.environ.get("AWS_REGION", "us-east-1"))
 BUCKET = os.environ.get("DATA_BUCKET")
 TEXT_MODEL_ID = os.environ.get("TEXT_MODEL_ID", "google.gemma-3-4b-it")
 MANTLE_BASE_URL = os.environ.get("MANTLE_BASE_URL", "https://bedrock-mantle.us-east-1.api.aws/v1")

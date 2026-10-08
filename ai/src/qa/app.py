@@ -6,10 +6,14 @@ from collections import defaultdict
 
 import boto3
 
-s3 = boto3.client("s3")
+s3 = boto3.client("s3", region_name=os.environ.get("AWS_REGION", "us-east-1"))
+ssm = boto3.client("ssm", region_name=os.environ.get("AWS_REGION", "us-east-1"))
 BUCKET = os.environ.get("DATA_BUCKET")
 TEXT_MODEL_ID = os.environ.get("TEXT_MODEL_ID", "google.gemma-3-4b-it")
 MANTLE_BASE_URL = os.environ.get("MANTLE_BASE_URL", "https://bedrock-mantle.us-east-1.api.aws/v1")
+BEDROCK_SSM_PARAM = os.environ.get("BEDROCK_SSM_PARAM")
+
+_cached_key = None
 
 STOPWORDS = {
     "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
@@ -24,7 +28,11 @@ class ThrottlingException(Exception):
 
 
 def api_key():
-    return os.environ["BEDROCK_API_KEY"]
+    global _cached_key
+    if _cached_key is None:
+        resp = ssm.get_parameter(Name=BEDROCK_SSM_PARAM, WithDecryption=True)
+        _cached_key = resp["Parameter"]["Value"]
+    return _cached_key
 
 
 def tokenize(text):
@@ -81,10 +89,11 @@ def answer_question(chunks_doc, index_doc, question, top_n=3, max_tokens=200):
 
 
 def lambda_handler(event, context):
+    user_id = event["userId"]
     document_id = event["documentId"]
     question = event["question"]
-    chunks_key = event.get("chunksKey", f"documents/{document_id}/chunks.json")
-    index_key = event.get("indexKey", f"documents/{document_id}/index.json")
+    chunks_key = event.get("chunksKey", f"processed/{user_id}/{document_id}/chunks.json")
+    index_key = event.get("indexKey", f"processed/{user_id}/{document_id}/index.json")
 
     chunks_obj = s3.get_object(Bucket=BUCKET, Key=chunks_key)
     chunks_doc = json.loads(chunks_obj["Body"].read())
@@ -93,4 +102,4 @@ def lambda_handler(event, context):
     index_doc = json.loads(index_obj["Body"].read())
 
     result = answer_question(chunks_doc, index_doc, question)
-    return {"status": "ok", **result}
+    return result

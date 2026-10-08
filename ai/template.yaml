@@ -21,6 +21,7 @@ Globals:
         TEXT_MODEL_ID: !Ref TextModelId
         MANTLE_BASE_URL: !Ref MantleBaseUrl
         BEDROCK_SSM_PARAM: !Sub '/lecdoc/${Stage}/bedrock-api-key'
+        AWS_S3_US_EAST_1_REGIONAL_ENDPOINT: regional
 
 Resources:
   ChunkFn:
