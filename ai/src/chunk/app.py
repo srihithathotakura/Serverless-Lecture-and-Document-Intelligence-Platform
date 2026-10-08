@@ -3,7 +3,7 @@ import os
 
 import boto3
 
-s3 = boto3.client("s3")
+s3 = boto3.client("s3", region_name=os.environ.get("AWS_REGION", "us-east-1"))
 BUCKET = os.environ.get("DATA_BUCKET")
 
 
