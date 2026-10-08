@@ -1,9 +1,9 @@
+import base64
 import json
 import os
 import re
 import urllib.error
 import urllib.request
-import uuid
 
 import boto3
 
@@ -11,6 +11,9 @@ BUCKET = os.environ["DATA_BUCKET"]
 s3 = boto3.client("s3")
 _ssm = boto3.client("ssm")
 _key = None
+
+STT_PROMPT = "Transcribe this audio exactly. Output only the transcript."
+STT_MAX_TOKENS = 400
 
 
 class ThrottlingException(Exception):
@@ -24,11 +27,9 @@ def api_key():
     return _key
 
 
-def call_model(path, body, content_type="application/json", timeout=50):
-    """POST to the Bedrock OpenAI-compatible endpoint. body is a dict (sent as JSON) or raw bytes."""
-    data = json.dumps(body).encode() if isinstance(body, dict) else body
-    req = urllib.request.Request(os.environ["MANTLE_BASE_URL"] + path, data=data,
-                                 headers={"Authorization": "Bearer " + api_key(), "Content-Type": content_type})
+def call_model(path, body, timeout=50):
+    req = urllib.request.Request(os.environ["MANTLE_BASE_URL"] + path, data=json.dumps(body).encode(),
+                                 headers={"Authorization": "Bearer " + api_key(), "Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return json.load(r)
@@ -42,27 +43,19 @@ def call_model(path, body, content_type="application/json", timeout=50):
         raise ThrottlingException("Model endpoint unreachable or slow")
 
 
-def multipart(fields, file_field, file_name, file_bytes, file_type):
-    boundary = uuid.uuid4().hex
-    parts = []
-    for name, value in fields.items():
-        parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode())
-    parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{file_field}"; filename="{file_name}"\r\n'
-                 f"Content-Type: {file_type}\r\n\r\n".encode() + file_bytes + b"\r\n")
-    parts.append(f"--{boundary}--\r\n".encode())
-    return b"".join(parts), f"multipart/form-data; boundary={boundary}"
-
-
 def stt_transcribe(wav_bytes):
-    """The one place that knows the speech request format. Must match infra/checks/check_stt.sh.
+    """The one place that knows the speech request format. Copied from infra/checks/check_stt.sh.
 
-    OpenAI-compatible transcription: multipart POST /audio/transcriptions with file + model,
-    response {"text": "..."}.
+    Chat completions with the WAV as base64 input_audio plus a transcribe instruction,
+    transcript in choices[0].message.content.
     """
-    body, content_type = multipart({"model": os.environ["STT_MODEL_ID"], "response_format": "json"},
-                                   "file", "window.wav", wav_bytes, "audio/wav")
-    result = call_model("/audio/transcriptions", body, content_type=content_type)
-    return result.get("text") or ""
+    body = {"model": os.environ["STT_MODEL_ID"], "max_tokens": STT_MAX_TOKENS,
+            "messages": [{"role": "user", "content": [
+                {"type": "input_audio", "input_audio": {"data": base64.b64encode(wav_bytes).decode(), "format": "wav"}},
+                {"type": "text", "text": STT_PROMPT}]}]}
+    result = call_model("/chat/completions", body)
+    choices = result.get("choices") or [{}]
+    return (choices[0].get("message") or {}).get("content") or ""
 
 
 def clean(text):

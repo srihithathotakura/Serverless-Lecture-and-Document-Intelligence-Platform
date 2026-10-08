@@ -1,3 +1,4 @@
+import base64
 import io
 import json
 import urllib.error
@@ -92,7 +93,7 @@ def test_transcribe_window_rejects_foreign_key():
         fn.lambda_handler(event, None)
 
 
-def test_stt_transcribe_sends_multipart():
+def test_stt_transcribe_sends_chat_completion():
     fn = load("transcribe_window")
     fn._key = "test-key"
     seen = {}
@@ -106,15 +107,25 @@ def test_stt_transcribe_sends_multipart():
 
     def fake_urlopen(req, timeout):
         seen.update(url=req.full_url, headers=dict(req.header_items()), data=req.data)
-        return Resp(b'{"text": "hi there"}')
+        return Resp(b'{"choices": [{"message": {"role": "assistant", "content": "hi there"}}]}')
 
     with mock.patch.object(fn.urllib.request, "urlopen", fake_urlopen):
         assert fn.stt_transcribe(b"WAVDATA") == "hi there"
-    assert seen["url"] == "https://mantle.example/v1/audio/transcriptions"
+    assert seen["url"] == "https://mantle.example/v1/chat/completions"
     assert seen["headers"]["Authorization"] == "Bearer test-key"
-    assert seen["headers"]["Content-type"].startswith("multipart/form-data; boundary=")
-    assert b'name="model"\r\n\r\ntest-stt-model' in seen["data"]
-    assert b"WAVDATA" in seen["data"]
+    assert seen["headers"]["Content-type"] == "application/json"
+    body = json.loads(seen["data"])
+    assert body["model"] == "test-stt-model"
+    assert body["max_tokens"] == 400
+    audio, prompt = body["messages"][0]["content"]
+    assert audio == {"type": "input_audio", "input_audio": {"data": base64.b64encode(b"WAVDATA").decode(), "format": "wav"}}
+    assert prompt == {"type": "text", "text": "Transcribe this audio exactly. Output only the transcript."}
+
+
+def test_stt_transcribe_empty_response():
+    fn = load("transcribe_window")
+    with mock.patch.object(fn, "call_model", return_value={"choices": [{"message": {"content": None}}]}):
+        assert fn.stt_transcribe(b"WAVDATA") == ""
 
 
 @pytest.mark.parametrize("code,exc_name", [(429, "ThrottlingException"), (503, "ThrottlingException"),
