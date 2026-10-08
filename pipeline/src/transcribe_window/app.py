@@ -12,7 +12,8 @@ s3 = boto3.client("s3")
 _ssm = boto3.client("ssm")
 _key = None
 
-STT_PROMPT = "Transcribe this audio exactly. Output only the transcript."
+# Without the language the model sometimes answers in another language (seen with samples/audio-1min.wav)
+STT_PROMPT = "Transcribe this English audio exactly, in English. Do not translate. Output only the transcript."
 STT_MAX_TOKENS = 400
 
 

@@ -57,5 +57,7 @@ For a PDF use `events/create-upload-pdf.json` and `-H "Content-Type: application
 
 `stt_transcribe()` in `src/transcribe_window/app.py` is the only place that knows the speech call.
 It copies the request from `infra/checks/check_stt.sh`: `POST /chat/completions` with the window as
-base64 `input_audio` (format `wav`) plus a "transcribe exactly" instruction, `max_tokens` 400, reading the
-transcript from `choices[0].message.content`. If the check script changes, change only that function.
+base64 `input_audio` (format `wav`) plus a transcribe instruction, `max_tokens` 400, reading the transcript
+from `choices[0].message.content`. The instruction names the language ("English audio ... Do not
+translate"): without it the model answered the English sample in German. If the check script changes,
+change only that function.
