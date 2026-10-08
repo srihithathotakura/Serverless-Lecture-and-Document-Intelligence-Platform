@@ -3,11 +3,11 @@
   "sourceType": "pdf",
   "segments": [
     {
-      "text": "Lecture notes page one. Serverless computing runs code without managing servers.",
+      "text": "Serverless Lecture Notes - Part 1 Today we will talk about serverless computing and why it changed how teams build software. In the traditional model, a team rents servers, installs an operating system, and keeps the machines patched and running all day, even when nobody is using the application. Serverless computing removes that burden. The cloud provider runs the servers, and the developer only supplies code and configuration. You pay for the time your code actually runs, measured in milliseconds, instead of paying for idle machines. The best known serverless compute service is a function service. A function is a small piece of code that starts when an event arrives, does one job, and stops. An event can be a file upload, a web request, a message in a queue, or a timer. Page 1",
       "page": 1
     },
     {
-      "text": "Page two. AWS Step Functions coordinates Lambda functions into a workflow.",
+      "text": "Serverless Lecture Notes - Part 2 Object storage is the second building block. A storage bucket holds files of any size and keeps several copies for durability. Buckets are private by default, and access is granted through policies. A web browser can upload straight into a bucket using a temporary signed link. The third building block is a managed database. A key value database stores items under a partition key and a sort key. Because each user owns a partition, listing the documents of one user is a fast query that never touches the data of other users. Authentication is the fourth building block. A user pool stores accounts, checks passwords, and issues signed tokens. When a request arrives at the application programming interface, the gateway verifies the token before any of our code runs, so unauthenticated calls are rejected early. Page 2",
       "page": 2
     }
   ]
