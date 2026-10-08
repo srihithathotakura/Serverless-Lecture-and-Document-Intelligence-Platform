@@ -119,7 +119,7 @@ def test_stt_transcribe_sends_chat_completion():
     assert body["max_tokens"] == 400
     audio, prompt = body["messages"][0]["content"]
     assert audio == {"type": "input_audio", "input_audio": {"data": base64.b64encode(b"WAVDATA").decode(), "format": "wav"}}
-    assert prompt == {"type": "text", "text": "Transcribe this audio exactly. Output only the transcript."}
+    assert prompt == {"type": "text", "text": "Transcribe this English audio exactly, in English. Do not translate. Output only the transcript."}
 
 
 def test_stt_transcribe_empty_response():
