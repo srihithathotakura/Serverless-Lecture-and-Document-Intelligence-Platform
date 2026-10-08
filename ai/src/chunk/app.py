@@ -4,10 +4,10 @@ import os
 import boto3
 
 s3 = boto3.client("s3", region_name=os.environ.get("AWS_REGION", "us-east-1"))
-BUCKET = os.environ.get("DATA_BUCKET")
+DEFAULT_BUCKET = os.environ.get("DATA_BUCKET")
 
 
-def make_chunks(doc, max_chars=500):
+def make_chunks(doc, document_id, max_chars=500):
     segments = doc["segments"]
     source_type = doc["sourceType"]
     chunks = []
@@ -20,13 +20,19 @@ def make_chunks(doc, max_chars=500):
         nonlocal cur_texts, cur_len, cur_start, cur_end
         if not cur_texts:
             return
-        chunk = {"text": " ".join(cur_texts)}
+        chunk = {
+            "text": " ".join(cur_texts),
+            "startSec": None,
+            "endSec": None,
+            "pageStart": None,
+            "pageEnd": None,
+        }
         if source_type == "audio":
             chunk["startSec"] = cur_start
             chunk["endSec"] = cur_end
         else:
-            chunk["startPage"] = cur_start
-            chunk["endPage"] = cur_end
+            chunk["pageStart"] = cur_start
+            chunk["pageEnd"] = cur_end
         chunks.append(chunk)
         cur_texts = []
         cur_len = 0
@@ -52,25 +58,28 @@ def make_chunks(doc, max_chars=500):
     flush()
 
     return {
-        "documentId": doc["documentId"],
+        "documentId": document_id,
         "sourceType": source_type,
-        "chunks": [{"chunkId": f"c{i:04d}", **c} for i, c in enumerate(chunks)],
+        "chunks": [
+            {"chunkId": f"{document_id}#{i + 1:04d}", **c} for i, c in enumerate(chunks)
+        ],
     }
 
 
 def lambda_handler(event, context):
     user_id = event["userId"]
     document_id = event["documentId"]
+    bucket = event.get("bucket", DEFAULT_BUCKET)
     text_key = event.get("textKey", f"processed/{user_id}/{document_id}/text.json")
 
-    obj = s3.get_object(Bucket=BUCKET, Key=text_key)
+    obj = s3.get_object(Bucket=bucket, Key=text_key)
     doc = json.loads(obj["Body"].read())
 
-    result = make_chunks(doc)
+    result = make_chunks(doc, document_id)
 
     out_key = f"processed/{user_id}/{document_id}/chunks.json"
     s3.put_object(
-        Bucket=BUCKET,
+        Bucket=bucket,
         Key=out_key,
         Body=json.dumps(result).encode(),
         ContentType="application/json",

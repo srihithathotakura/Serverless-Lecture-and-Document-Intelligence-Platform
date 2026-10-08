@@ -6,10 +6,10 @@ import boto3
 
 s3 = boto3.client("s3", region_name=os.environ.get("AWS_REGION", "us-east-1"))
 ssm = boto3.client("ssm", region_name=os.environ.get("AWS_REGION", "us-east-1"))
-BUCKET = os.environ.get("DATA_BUCKET")
+DEFAULT_BUCKET = os.environ.get("DATA_BUCKET")
 TEXT_MODEL_ID = os.environ.get("TEXT_MODEL_ID", "google.gemma-3-4b-it")
 MANTLE_BASE_URL = os.environ.get("MANTLE_BASE_URL", "https://bedrock-mantle.us-east-1.api.aws/v1")
-BEDROCK_SSM_PARAM = os.environ.get("BEDROCK_SSM_PARAM")
+BEDROCK_KEY_PARAM = os.environ.get("BEDROCK_KEY_PARAM")
 
 _cached_key = None
 
@@ -21,7 +21,7 @@ class ThrottlingException(Exception):
 def api_key():
     global _cached_key
     if _cached_key is None:
-        resp = ssm.get_parameter(Name=BEDROCK_SSM_PARAM, WithDecryption=True)
+        resp = ssm.get_parameter(Name=BEDROCK_KEY_PARAM, WithDecryption=True)
         _cached_key = resp["Parameter"]["Value"]
     return _cached_key
 
@@ -51,18 +51,30 @@ def generate(instruction, text, max_tokens=300, timeout=60):
 
 def summarize_chunks(chunks_doc, max_tokens=300):
     full_text = " ".join(c["text"] for c in chunks_doc["chunks"])
-    instruction = "Summarize the following lecture content in 3-5 concise sentences, covering the key points."
+    instruction = (
+        "Summarize the following lecture content in plain text, at most 250 words, "
+        "covering the key points."
+    )
     return generate(instruction, full_text, max_tokens=max_tokens)
 
 
 def lambda_handler(event, context):
     user_id = event["userId"]
     document_id = event["documentId"]
+    bucket = event.get("bucket", DEFAULT_BUCKET)
     chunks_key = event.get("chunksKey", f"processed/{user_id}/{document_id}/chunks.json")
 
-    obj = s3.get_object(Bucket=BUCKET, Key=chunks_key)
+    obj = s3.get_object(Bucket=bucket, Key=chunks_key)
     chunks_doc = json.loads(obj["Body"].read())
 
     summary_text = summarize_chunks(chunks_doc)
+
+    summary_key = f"processed/{user_id}/{document_id}/summary.txt"
+    s3.put_object(
+        Bucket=bucket,
+        Key=summary_key,
+        Body=summary_text.encode(),
+        ContentType="text/plain",
+    )
 
     return {"summary": summary_text}

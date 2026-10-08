@@ -1,12 +1,12 @@
 import json
 import os
 import re
-from collections import defaultdict
+from collections import Counter
 
 import boto3
 
 s3 = boto3.client("s3", region_name=os.environ.get("AWS_REGION", "us-east-1"))
-BUCKET = os.environ.get("DATA_BUCKET")
+DEFAULT_BUCKET = os.environ.get("DATA_BUCKET")
 
 STOPWORDS = {
     "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
@@ -21,29 +21,44 @@ def tokenize(text):
     return [w for w in words if w not in STOPWORDS and len(w) > 1]
 
 
-def build_index(chunks_doc):
-    inverted = defaultdict(set)
+def build_index(chunks_doc, file_name):
+    out_chunks = []
     for chunk in chunks_doc["chunks"]:
-        for word in tokenize(chunk["text"]):
-            inverted[word].add(chunk["chunkId"])
+        tf = dict(Counter(tokenize(chunk["text"])))
+        out_chunks.append({
+            "chunkId": chunk["chunkId"],
+            "text": chunk["text"],
+            "startSec": chunk.get("startSec"),
+            "endSec": chunk.get("endSec"),
+            "pageStart": chunk.get("pageStart"),
+            "pageEnd": chunk.get("pageEnd"),
+            "tf": tf,
+        })
 
-    index = {word: sorted(ids) for word, ids in inverted.items()}
-    return {"documentId": chunks_doc["documentId"], "index": index}
+    return {
+        "documentId": chunks_doc["documentId"],
+        "fileName": file_name,
+        "sourceType": chunks_doc["sourceType"],
+        "method": "tfidf-v1",
+        "chunks": out_chunks,
+    }
 
 
 def lambda_handler(event, context):
     user_id = event["userId"]
     document_id = event["documentId"]
+    bucket = event.get("bucket", DEFAULT_BUCKET)
     chunks_key = event.get("chunksKey", f"processed/{user_id}/{document_id}/chunks.json")
+    file_name = event.get("fileName", "")
 
-    obj = s3.get_object(Bucket=BUCKET, Key=chunks_key)
+    obj = s3.get_object(Bucket=bucket, Key=chunks_key)
     chunks_doc = json.loads(obj["Body"].read())
 
-    result = build_index(chunks_doc)
+    result = build_index(chunks_doc, file_name)
 
     out_key = f"processed/{user_id}/{document_id}/index.json"
     s3.put_object(
-        Bucket=BUCKET,
+        Bucket=bucket,
         Key=out_key,
         Body=json.dumps(result).encode(),
         ContentType="application/json",
