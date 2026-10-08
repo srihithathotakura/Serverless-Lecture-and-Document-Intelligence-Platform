@@ -1,0 +1,2 @@
+{"requestContext":{"authorizer":{"jwt":{"claims":{"sub":"user-A"}}}},
+ "body":"{\"fileName\":\"a.mp3\",\"contentType\":\"audio/mpeg\"}"}

@@ -1,0 +1,257 @@
+Transform: AWS::Serverless-2016-10-31
+Description: lecdoc pipeline stack - document CRUD Lambdas, pipeline Lambdas, state machine, upload trigger
+
+Parameters:
+  Stage:
+    Type: String
+  SttModelId:
+    Type: String
+  MantleBaseUrl:
+    Type: String
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Handler: app.lambda_handler
+    Timeout: 15
+    MemorySize: 256
+    Environment:
+      Variables:
+        STAGE: !Ref Stage
+        DATA_BUCKET: { 'Fn::ImportValue': !Sub 'lecdoc-${Stage}-DataBucketName' }
+        DOCUMENTS_TABLE: { 'Fn::ImportValue': !Sub 'lecdoc-${Stage}-DocumentsTableName' }
+
+Resources:
+  # ---------- CRUD Lambdas (behind the HTTP API) ----------
+  CreateUploadFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub lecdoc-${Stage}-create-upload
+      CodeUri: src/create_upload/
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: dynamodb:PutItem
+              Resource: { 'Fn::ImportValue': !Sub 'lecdoc-${Stage}-DocumentsTableArn' }
+            - Effect: Allow
+              Action: s3:PutObject
+              Resource: !Sub
+                - '${Bucket}/uploads/*'
+                - Bucket: { 'Fn::ImportValue': !Sub 'lecdoc-${Stage}-DataBucketArn' }
+
+  ListDocumentsFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub lecdoc-${Stage}-list-documents
+      CodeUri: src/list_documents/
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: dynamodb:Query
+              Resource: { 'Fn::ImportValue': !Sub 'lecdoc-${Stage}-DocumentsTableArn' }
+
+  GetDocumentFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub lecdoc-${Stage}-get-document
+      CodeUri: src/get_document/
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: dynamodb:GetItem
+              Resource: { 'Fn::ImportValue': !Sub 'lecdoc-${Stage}-DocumentsTableArn' }
+            - Effect: Allow
+              Action: s3:GetObject
+              Resource: !Sub
+                - '${Bucket}/processed/*'
+                - Bucket: { 'Fn::ImportValue': !Sub 'lecdoc-${Stage}-DataBucketArn' }
+
+  DeleteDocumentFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub lecdoc-${Stage}-delete-document
+      CodeUri: src/delete_document/
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:DeleteItem
+              Resource: { 'Fn::ImportValue': !Sub 'lecdoc-${Stage}-DocumentsTableArn' }
+            - Effect: Allow
+              Action: s3:DeleteObject
+              Resource:
+                - !Sub
+                  - '${Bucket}/uploads/*'
+                  - Bucket: { 'Fn::ImportValue': !Sub 'lecdoc-${Stage}-DataBucketArn' }
+                - !Sub
+                  - '${Bucket}/processed/*'
+                  - Bucket: { 'Fn::ImportValue': !Sub 'lecdoc-${Stage}-DataBucketArn' }
+            - Effect: Allow
+              Action: s3:ListBucket
+              Resource: { 'Fn::ImportValue': !Sub 'lecdoc-${Stage}-DataBucketArn' }
+              Condition:
+                StringLike:
+                  's3:prefix': ['uploads/*', 'processed/*']
+
+  # ---------- Pipeline Lambdas (called by the state machine) ----------
+  ParseEventFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub lecdoc-${Stage}-parse-event
+      CodeUri: src/parse_event/
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: dynamodb:UpdateItem
+              Resource: { 'Fn::ImportValue': !Sub 'lecdoc-${Stage}-DocumentsTableArn' }
+
+  SplitAudioFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub lecdoc-${Stage}-split-audio
+      CodeUri: src/split_audio/
+      Timeout: 120
+      MemorySize: 1024
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: s3:GetObject
+              Resource: !Sub
+                - '${Bucket}/uploads/*'
+                - Bucket: { 'Fn::ImportValue': !Sub 'lecdoc-${Stage}-DataBucketArn' }
+            - Effect: Allow
+              Action: s3:PutObject
+              Resource: !Sub
+                - '${Bucket}/processed/*'
+                - Bucket: { 'Fn::ImportValue': !Sub 'lecdoc-${Stage}-DataBucketArn' }
+
+  TranscribeWindowFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub lecdoc-${Stage}-transcribe-window
+      CodeUri: src/transcribe_window/
+      Timeout: 60
+      MemorySize: 512
+      Environment:
+        Variables:
+          STT_MODEL_ID: !Ref SttModelId
+          MANTLE_BASE_URL: !Ref MantleBaseUrl
+          BEDROCK_KEY_PARAM: !Sub '/lecdoc/${Stage}/bedrock-api-key'
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: s3:GetObject
+              Resource: !Sub
+                - '${Bucket}/processed/*'
+                - Bucket: { 'Fn::ImportValue': !Sub 'lecdoc-${Stage}-DataBucketArn' }
+            - Effect: Allow
+              Action: ssm:GetParameter
+              Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/lecdoc/${Stage}/bedrock-api-key'
+
+  AssembleAudioTextFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub lecdoc-${Stage}-assemble-audio-text
+      CodeUri: src/assemble_audio_text/
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: s3:PutObject
+              Resource: !Sub
+                - '${Bucket}/processed/*'
+                - Bucket: { 'Fn::ImportValue': !Sub 'lecdoc-${Stage}-DataBucketArn' }
+
+  ExtractPdfFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub lecdoc-${Stage}-extract-pdf
+      CodeUri: src/extract_pdf/
+      Timeout: 60
+      MemorySize: 512
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: s3:GetObject
+              Resource: !Sub
+                - '${Bucket}/uploads/*'
+                - Bucket: { 'Fn::ImportValue': !Sub 'lecdoc-${Stage}-DataBucketArn' }
+            - Effect: Allow
+              Action: s3:PutObject
+              Resource: !Sub
+                - '${Bucket}/processed/*'
+                - Bucket: { 'Fn::ImportValue': !Sub 'lecdoc-${Stage}-DataBucketArn' }
+
+  UpdateStatusFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub lecdoc-${Stage}-update-status
+      CodeUri: src/update_status/
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+              Resource: { 'Fn::ImportValue': !Sub 'lecdoc-${Stage}-DocumentsTableArn' }
+
+  # ---------- State machine and upload trigger ----------
+  PipelineStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Name: !Sub lecdoc-${Stage}-pipeline
+      Type: STANDARD
+      DefinitionUri: statemachine.asl.json
+      DefinitionSubstitutions:
+        ParseEventFnArn: !GetAtt ParseEventFn.Arn
+        SplitAudioFnArn: !GetAtt SplitAudioFn.Arn
+        TranscribeWindowFnArn: !GetAtt TranscribeWindowFn.Arn
+        AssembleAudioTextFnArn: !GetAtt AssembleAudioTextFn.Arn
+        ExtractPdfFnArn: !GetAtt ExtractPdfFn.Arn
+        UpdateStatusFnArn: !GetAtt UpdateStatusFn.Arn
+        ChunkFnArn: { 'Fn::ImportValue': !Sub 'lecdoc-${Stage}-ChunkFnArn' }
+        SummarizeFnArn: { 'Fn::ImportValue': !Sub 'lecdoc-${Stage}-SummarizeFnArn' }
+        IndexFnArn: { 'Fn::ImportValue': !Sub 'lecdoc-${Stage}-IndexFnArn' }
+      Policies:
+        - LambdaInvokePolicy: { FunctionName: !Ref ParseEventFn }
+        - LambdaInvokePolicy: { FunctionName: !Ref SplitAudioFn }
+        - LambdaInvokePolicy: { FunctionName: !Ref TranscribeWindowFn }
+        - LambdaInvokePolicy: { FunctionName: !Ref AssembleAudioTextFn }
+        - LambdaInvokePolicy: { FunctionName: !Ref ExtractPdfFn }
+        - LambdaInvokePolicy: { FunctionName: !Ref UpdateStatusFn }
+        - Statement:
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource:
+                - { 'Fn::ImportValue': !Sub 'lecdoc-${Stage}-ChunkFnArn' }
+                - { 'Fn::ImportValue': !Sub 'lecdoc-${Stage}-SummarizeFnArn' }
+                - { 'Fn::ImportValue': !Sub 'lecdoc-${Stage}-IndexFnArn' }
+      Events:
+        OnUpload:
+          Type: EventBridgeRule
+          Properties:
+            Pattern:
+              source: [aws.s3]
+              detail-type: [Object Created]
+              detail:
+                bucket:
+                  name: [{ 'Fn::ImportValue': !Sub 'lecdoc-${Stage}-DataBucketName' }]
+                object:
+                  key: [{ prefix: uploads/ }]
+
+Outputs:
+  CreateUploadFnArn:
+    Value: !GetAtt CreateUploadFn.Arn
+    Export: { Name: !Sub 'lecdoc-${Stage}-CreateUploadFnArn' }
+  ListDocumentsFnArn:
+    Value: !GetAtt ListDocumentsFn.Arn
+    Export: { Name: !Sub 'lecdoc-${Stage}-ListDocumentsFnArn' }
+  GetDocumentFnArn:
+    Value: !GetAtt GetDocumentFn.Arn
+    Export: { Name: !Sub 'lecdoc-${Stage}-GetDocumentFnArn' }
+  DeleteDocumentFnArn:
+    Value: !GetAtt DeleteDocumentFn.Arn
+    Export: { Name: !Sub 'lecdoc-${Stage}-DeleteDocumentFnArn' }
+  StateMachineArn:
+    Value: !Ref PipelineStateMachine
+    Export: { Name: !Sub 'lecdoc-${Stage}-StateMachineArn' }

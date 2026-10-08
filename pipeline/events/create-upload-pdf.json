@@ -1,0 +1,2 @@
+{"requestContext":{"authorizer":{"jwt":{"claims":{"sub":"user-A"}}}},
+ "body":"{\"fileName\":\"notes.pdf\",\"contentType\":\"application/pdf\"}"}
