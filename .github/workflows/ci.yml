@@ -1,26 +1,48 @@
-name: ci
+name: main
 
 on:
   pull_request:
   push:
     branches: [main]
 
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   ci:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check .
+      - run: pytest -q
+      - run: cfn-lint $(git ls-files 'infra/*.yaml' '*template.yaml')
+      - run: "! git grep -n -e AKIA -e ABSK -e aws_secret -- . ':!docs' ':!.github'"
+
+  deploy:
+    needs: ci
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: demo
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - uses: aws-actions/setup-sam@v2
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
-          python-version: "3.12"
-
-      - name: Install dev dependencies
-        run: pip install -r requirements-dev.txt
-
-      - name: Lint
-        run: ruff check .
-
-      - name: Test
-        run: |
-          pytest -q || [ $? -eq 5 ]   # exit code 5 = no tests collected yet, allowed for now
+          role-to-assume: ${{ vars.DEMO_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+      - run: ./infra/deploy.sh demo
+        env:
+          ALERT_EMAIL: ${{ vars.ALERT_EMAIL }}
+          BEDROCK_API_KEY: ${{ secrets.BEDROCK_API_KEY }}

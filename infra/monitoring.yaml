@@ -1,0 +1,115 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: lecdoc monitoring - CloudWatch dashboard and alarms (owner m3)
+
+Parameters:
+  Stage:
+    Type: String
+    AllowedValues: [dev, demo]
+
+Resources:
+  Dashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub lecdoc-${Stage}
+      DashboardBody: !Sub
+        - |
+          {"widgets":[
+            {"type":"text","x":0,"y":0,"width":24,"height":2,"properties":{
+              "markdown":"# lecdoc-${Stage}  \nLambda errors, pipeline runs, processing time, API latency and AI token use"}},
+            {"type":"metric","x":0,"y":2,"width":12,"height":6,"properties":{
+              "title":"Lambda errors (all 15 functions)","region":"${AWS::Region}","stat":"Sum","period":300,"view":"timeSeries",
+              "metrics":[
+                ["AWS/Lambda","Errors","FunctionName","lecdoc-${Stage}-create-upload"],
+                ["AWS/Lambda","Errors","FunctionName","lecdoc-${Stage}-list-documents"],
+                ["AWS/Lambda","Errors","FunctionName","lecdoc-${Stage}-get-document"],
+                ["AWS/Lambda","Errors","FunctionName","lecdoc-${Stage}-delete-document"],
+                ["AWS/Lambda","Errors","FunctionName","lecdoc-${Stage}-parse-event"],
+                ["AWS/Lambda","Errors","FunctionName","lecdoc-${Stage}-split-audio"],
+                ["AWS/Lambda","Errors","FunctionName","lecdoc-${Stage}-transcribe-window"],
+                ["AWS/Lambda","Errors","FunctionName","lecdoc-${Stage}-assemble-audio-text"],
+                ["AWS/Lambda","Errors","FunctionName","lecdoc-${Stage}-extract-pdf"],
+                ["AWS/Lambda","Errors","FunctionName","lecdoc-${Stage}-update-status"],
+                ["AWS/Lambda","Errors","FunctionName","lecdoc-${Stage}-chunk"],
+                ["AWS/Lambda","Errors","FunctionName","lecdoc-${Stage}-summarize"],
+                ["AWS/Lambda","Errors","FunctionName","lecdoc-${Stage}-index"],
+                ["AWS/Lambda","Errors","FunctionName","lecdoc-${Stage}-qa"],
+                ["AWS/Lambda","Errors","FunctionName","lecdoc-${Stage}-speak"]
+              ]}},
+            {"type":"metric","x":12,"y":2,"width":12,"height":6,"properties":{
+              "title":"Lambda duration p95 (ms)","region":"${AWS::Region}","period":300,"view":"timeSeries",
+              "metrics":[
+                ["AWS/Lambda","Duration","FunctionName","lecdoc-${Stage}-split-audio",{"stat":"p95"}],
+                ["AWS/Lambda","Duration","FunctionName","lecdoc-${Stage}-transcribe-window",{"stat":"p95"}],
+                ["AWS/Lambda","Duration","FunctionName","lecdoc-${Stage}-extract-pdf",{"stat":"p95"}],
+                ["AWS/Lambda","Duration","FunctionName","lecdoc-${Stage}-summarize",{"stat":"p95"}],
+                ["AWS/Lambda","Duration","FunctionName","lecdoc-${Stage}-qa",{"stat":"p95"}]
+              ]}},
+            {"type":"metric","x":0,"y":8,"width":12,"height":6,"properties":{
+              "title":"Pipeline executions","region":"${AWS::Region}","stat":"Sum","period":300,"view":"timeSeries",
+              "metrics":[
+                ["AWS/States","ExecutionsStarted","StateMachineArn","arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:lecdoc-${Stage}-pipeline"],
+                ["AWS/States","ExecutionsSucceeded","StateMachineArn","arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:lecdoc-${Stage}-pipeline"],
+                ["AWS/States","ExecutionsFailed","StateMachineArn","arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:lecdoc-${Stage}-pipeline"]
+              ]}},
+            {"type":"metric","x":12,"y":8,"width":12,"height":6,"properties":{
+              "title":"Average processing time (ms)","region":"${AWS::Region}","stat":"Average","period":3600,"view":"singleValue",
+              "metrics":[
+                ["AWS/States","ExecutionTime","StateMachineArn","arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:lecdoc-${Stage}-pipeline"]
+              ]}},
+            {"type":"metric","x":0,"y":14,"width":12,"height":6,"properties":{
+              "title":"API latency p95 (ms), 4xx, 5xx, requests","region":"${AWS::Region}","period":300,"view":"timeSeries",
+              "metrics":[
+                ["AWS/ApiGateway","Latency","ApiId","${ApiId}",{"stat":"p95"}],
+                ["AWS/ApiGateway","5xx","ApiId","${ApiId}",{"stat":"Sum"}],
+                ["AWS/ApiGateway","4xx","ApiId","${ApiId}",{"stat":"Sum"}],
+                ["AWS/ApiGateway","Count","ApiId","${ApiId}",{"stat":"Sum"}]
+              ]}},
+            {"type":"log","x":12,"y":14,"width":12,"height":6,"properties":{
+              "title":"AI tokens per hour","region":"${AWS::Region}","view":"table",
+              "query":"SOURCE '/aws/lambda/lecdoc-${Stage}-summarize' | SOURCE '/aws/lambda/lecdoc-${Stage}-qa' | filter event = 'AI_USAGE' | stats sum(total_tokens) as tokens by bin(1h)"}}
+          ]}
+        - ApiId: { 'Fn::ImportValue': !Sub 'lecdoc-${Stage}-ApiId' }
+
+  PipelineFailedAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub lecdoc-${Stage}-pipeline-failed
+      AlarmDescription: A lecdoc pipeline (Step Functions) execution failed
+      Namespace: AWS/States
+      MetricName: ExecutionsFailed
+      Dimensions:
+        - Name: StateMachineArn
+          Value: !Sub arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:lecdoc-${Stage}-pipeline
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - { 'Fn::ImportValue': !Sub 'lecdoc-${Stage}-AlertTopicArn' }
+
+  Api5xxAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub lecdoc-${Stage}-api-5xx
+      AlarmDescription: lecdoc HTTP API returned 5 or more 5xx responses in 5 minutes
+      Namespace: AWS/ApiGateway
+      MetricName: 5xx
+      Dimensions:
+        - Name: ApiId
+          Value: { 'Fn::ImportValue': !Sub 'lecdoc-${Stage}-ApiId' }
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - { 'Fn::ImportValue': !Sub 'lecdoc-${Stage}-AlertTopicArn' }
+
+Outputs:
+  DashboardName:
+    Value: !Ref Dashboard
+  DashboardUrl:
+    Value: !Sub https://${AWS::Region}.console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#dashboards:name=lecdoc-${Stage}
