@@ -1,0 +1,34 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: GitHub OIDC provider and deploy role for lecdoc demo
+
+Parameters:
+  GitHubOrg: { Type: String }
+  GitHubRepo: { Type: String }
+
+Resources:
+  OidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList: [sts.amazonaws.com]
+
+  DeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: lecdoc-github-deploy
+      ManagedPolicyArns: [arn:aws:iam::aws:policy/AdministratorAccess]
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Federated: !Ref OidcProvider }
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                'token.actions.githubusercontent.com:aud': sts.amazonaws.com
+              StringLike:
+                'token.actions.githubusercontent.com:sub': !Sub 'repo:${GitHubOrg}/${GitHubRepo}:*'
+
+Outputs:
+  RoleArn:
+    Value: !GetAtt DeployRole.Arn
