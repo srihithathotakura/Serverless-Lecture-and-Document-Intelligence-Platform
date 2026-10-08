@@ -1,0 +1,16 @@
+{
+  "documentId": "fixture-audio-0001",
+  "sourceType": "audio",
+  "segments": [
+    {
+      "text": "Today we will talk about serverless computing and why it changed how teams build software. In the traditional model, a team rents servers, installs an operating system, and keeps the machines patched and running all day, even when nobody is using the application. Serverless computing removes that burden. The cloud provider runs the servers and the developer only supplies code and configuration. You pay for the time your code actually runs, measured in milliseconds, instead of paying for idle machines. The best known...",
+      "startSec": 0.0,
+      "endSec": 30.0
+    },
+    {
+      "text": "Serverless compute service is a function service. A function is a small piece of code that starts when an event arrives, does one job, and stops. An event can be a file upload, a web request, a message in a queue, or a timer. Object storage is the second building block. A storage bucket holds files of any size and keeps several copies for durability. Buckets are private by default, and access is granted through policies. A web browser can upload straight into a bucket using a temporary signed link.",
+      "startSec": 30.0,
+      "endSec": 60.0
+    }
+  ]
+}
