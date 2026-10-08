@@ -17,3 +17,42 @@ Globals:
       Variables:
         STAGE: !Ref Stage
         DATA_BUCKET: { 'Fn::ImportValue': !Sub 'lecdoc-${Stage}-DataBucketName' }
+
+Resources:
+  ChunkFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/chunk/
+  SummarizeFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/summarize/
+  IndexFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/index/
+  QaFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/qa/
+  SpeakFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/speak/
+
+Outputs:
+  ChunkFnArn:
+    Value: !GetAtt ChunkFn.Arn
+    Export: { Name: !Sub 'lecdoc-${Stage}-ChunkFnArn' }
+  SummarizeFnArn:
+    Value: !GetAtt SummarizeFn.Arn
+    Export: { Name: !Sub 'lecdoc-${Stage}-SummarizeFnArn' }
+  IndexFnArn:
+    Value: !GetAtt IndexFn.Arn
+    Export: { Name: !Sub 'lecdoc-${Stage}-IndexFnArn' }
+  QaFnArn:
+    Value: !GetAtt QaFn.Arn
+    Export: { Name: !Sub 'lecdoc-${Stage}-QaFnArn' }
+  SpeakFnArn:
+    Value: !GetAtt SpeakFn.Arn
+    Export: { Name: !Sub 'lecdoc-${Stage}-SpeakFnArn' }
