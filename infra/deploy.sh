@@ -58,7 +58,8 @@ sam_stack pipeline pipeline m1 SttModelId="$STT_MODEL" MantleBaseUrl="$MANTLE_UR
 cfn api api/template.yaml m4
 cfn web frontend/template.yaml m4
 if want web && [ -f frontend/app/package.json ]; then ./infra/build-frontend.sh "$STAGE"; fi
-if aws cloudformation list-exports --query "Exports[?Name=='lecdoc-$STAGE-ApiId'].Name" --output text | grep -q ApiId; then
+API_EXPORT=$(aws cloudformation list-exports --query "Exports[?Name=='lecdoc-$STAGE-ApiId'].Name" --output text)
+if [[ "$API_EXPORT" == *ApiId* ]]; then
   cfn monitoring infra/monitoring.yaml m3
 else
   echo "skip monitoring (api stack not deployed yet: no lecdoc-$STAGE-ApiId export)"
