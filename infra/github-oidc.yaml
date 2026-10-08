@@ -4,6 +4,8 @@ Description: GitHub OIDC provider and deploy role for lecdoc demo
 Parameters:
   GitHubOrg: { Type: String }
   GitHubRepo: { Type: String }
+  GitHubOrgId: { Type: String, Default: '0' }
+  GitHubRepoId: { Type: String, Default: '0' }
 
 Resources:
   OidcProvider:
@@ -27,7 +29,9 @@ Resources:
               StringEquals:
                 'token.actions.githubusercontent.com:aud': sts.amazonaws.com
               StringLike:
-                'token.actions.githubusercontent.com:sub': !Sub 'repo:${GitHubOrg}/${GitHubRepo}:*'
+                'token.actions.githubusercontent.com:sub':
+                  - !Sub 'repo:${GitHubOrg}/${GitHubRepo}:*'
+                  - !Sub 'repo:${GitHubOrg}@${GitHubOrgId}/${GitHubRepo}@${GitHubRepoId}:*'
 
 Outputs:
   RoleArn:

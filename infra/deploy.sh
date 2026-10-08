@@ -4,6 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 STAGE=${1:?usage: deploy.sh dev|demo [stack]}
+[ "$STAGE" = demo ] && [ "${GITHUB_ACTIONS:-}" != true ] && { echo "demo is deployed by CI only"; exit 1; }
 ONLY=${2:-}
 CFG=infra/config/$STAGE.json
 export AWS_DEFAULT_REGION=$(jq -r .region "$CFG")
