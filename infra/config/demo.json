@@ -1,5 +1,6 @@
 {
   "region": "us-east-1",
+  "skipStacks": ["web"],
   "alertEmail": "change-me@example.com",
   "textModelId": "google.gemma-3-4b-it",
   "sttModelId": "mistral.voxtral-mini-3b-2507",
