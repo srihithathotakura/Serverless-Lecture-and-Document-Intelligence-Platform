@@ -1,4 +1,6 @@
-# Teardown
+# Teardown (M3)
+
+Run after final grading. Serverless idle cost is near zero, but S3 data and CloudWatch logs persist until deleted. Each member tears down their own dev account (section 1); M3 also tears down demo.
 
 Run this after grading. Order matters: a stack whose export is in use cannot be deleted, so delete dependents first.
 Always check the account before each block.
@@ -9,7 +11,7 @@ aws sts get-caller-identity --query Account --output text
 # demo = 492613852256  (AWS_PROFILE=lecdoc-demo)
 ```
 
-## 1. Stacks and data (per account)
+## 1. Stacks and data (per account; each member runs this in their own dev account)
 
 ```bash
 export AWS_PROFILE=lecdoc-dev      # then repeat with lecdoc-demo
@@ -104,3 +106,22 @@ aws lambda list-functions --query "Functions[?starts_with(FunctionName,'lecdoc')
 ```
 
 All five must print nothing. Then check Billing for the next day to confirm no new charges.
+
+## 9. Other keys and accounts
+
+- Bedrock console, API keys: delete every key created for this project (each member's and the demo key).
+- IAM: delete the access keys of every dev-admin user (`aws iam list-access-keys --user-name dev-admin`, then `aws iam delete-access-key`).
+- GitHub: delete the environment secret `BEDROCK_API_KEY` and the variables `DEMO_DEPLOY_ROLE_ARN`, `ALERT_EMAIL` (Settings, Environments, demo).
+- Billing: keep the budget alarms until the final bill shows zero, then delete them. Close the demo account if the team no longer needs it (Account, Close account).
+
+## 10. What can cost money if left running
+
+| Item | Why |
+|---|---|
+| S3 data bucket | stored uploads and processed text (60-day lifecycle rule is a safety net) |
+| CloudWatch logs and dashboard | log storage; the first 3 dashboards are free |
+| Bedrock API key | no cost while idle, but a leaked key can be abused: delete it |
+
+## 11. Re-deploy after a teardown
+
+`export BEDROCK_API_KEY=... ALERT_EMAIL=...` then `./infra/deploy.sh dev`. The deploy script recreates the SSM key. Demo is redeployed by running the GitHub Actions workflow.
