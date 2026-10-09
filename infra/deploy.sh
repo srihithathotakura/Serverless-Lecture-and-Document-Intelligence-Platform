@@ -58,7 +58,12 @@ sam_stack ai ai m2 TextModelId="$TEXT_MODEL" MantleBaseUrl="$MANTLE_URL"
 sam_stack pipeline pipeline m1 SttModelId="$STT_MODEL" MantleBaseUrl="$MANTLE_URL"
 cfn api api/template.yaml m4
 cfn web frontend/template.yaml m4
-if want web && [ -f frontend/app/package.json ]; then ./infra/build-frontend.sh "$STAGE"; fi
+WEB_BUCKET=$(aws cloudformation list-exports --query "Exports[?Name=='lecdoc-$STAGE-WebBucketName'].Value" --output text)
+if want web && [ -f frontend/app/package.json ] && [ -n "$WEB_BUCKET" ]; then
+  ./infra/build-frontend.sh "$STAGE"
+else
+  echo "skip frontend build (web stack not deployed)"
+fi
 API_EXPORT=$(aws cloudformation list-exports --query "Exports[?Name=='lecdoc-$STAGE-ApiId'].Name" --output text)
 if [[ "$API_EXPORT" == *ApiId* ]]; then
   cfn monitoring infra/monitoring.yaml m3
