@@ -1,17 +1,18 @@
 import json
+import math
 import os
 import re
 import urllib.request
-from collections import defaultdict
+from collections import Counter
 
 import boto3
 
 s3 = boto3.client("s3", region_name=os.environ.get("AWS_REGION", "us-east-1"))
 ssm = boto3.client("ssm", region_name=os.environ.get("AWS_REGION", "us-east-1"))
-BUCKET = os.environ.get("DATA_BUCKET")
+DEFAULT_BUCKET = os.environ.get("DATA_BUCKET")
 TEXT_MODEL_ID = os.environ.get("TEXT_MODEL_ID", "google.gemma-3-4b-it")
 MANTLE_BASE_URL = os.environ.get("MANTLE_BASE_URL", "https://bedrock-mantle.us-east-1.api.aws/v1")
-BEDROCK_SSM_PARAM = os.environ.get("BEDROCK_SSM_PARAM")
+BEDROCK_KEY_PARAM = os.environ.get("BEDROCK_KEY_PARAM")
 
 _cached_key = None
 
@@ -30,7 +31,7 @@ class ThrottlingException(Exception):
 def api_key():
     global _cached_key
     if _cached_key is None:
-        resp = ssm.get_parameter(Name=BEDROCK_SSM_PARAM, WithDecryption=True)
+        resp = ssm.get_parameter(Name=BEDROCK_KEY_PARAM, WithDecryption=True)
         _cached_key = resp["Parameter"]["Value"]
     return _cached_key
 
@@ -40,14 +41,42 @@ def tokenize(text):
     return [w for w in words if w not in STOPWORDS and len(w) > 1]
 
 
-def search(index_doc, query, top_n=3):
-    query_words = tokenize(query)
-    scores = defaultdict(int)
-    for word in query_words:
-        for chunk_id in index_doc["index"].get(word, []):
-            scores[chunk_id] += 1
-    ranked = sorted(scores.items(), key=lambda x: -x[1])
-    return [chunk_id for chunk_id, _ in ranked[:top_n]]
+def tfidf_search(index_doc, query, top_n=3):
+    chunks = index_doc["chunks"]
+    n_chunks = len(chunks)
+    query_terms = tokenize(query)
+    if not query_terms or n_chunks == 0:
+        return []
+
+    doc_freq = Counter()
+    for chunk in chunks:
+        for term in set(chunk["tf"].keys()) & set(query_terms):
+            doc_freq[term] += 1
+
+    scores = []
+    for chunk in chunks:
+        score = 0.0
+        for term in query_terms:
+            tf = chunk["tf"].get(term, 0)
+            if tf == 0:
+                continue
+            idf = math.log((n_chunks + 1) / (1 + doc_freq.get(term, 0))) + 1
+            score += tf * idf
+        scores.append((chunk, score))
+
+    scores.sort(key=lambda x: -x[1])
+    return [c for c, s in scores[:top_n] if s > 0]
+
+
+def make_label(chunk):
+    if chunk.get("startSec") is not None:
+        start = int(chunk["startSec"])
+        end = int(chunk["endSec"])
+        return f"{start // 60}:{start % 60:02d}-{end // 60}:{end % 60:02d}"
+    if chunk.get("pageStart") is not None:
+        p1, p2 = chunk["pageStart"], chunk["pageEnd"]
+        return f"p.{p1}" if p1 == p2 else f"pp.{p1}-{p2}"
+    return ""
 
 
 def generate(instruction, text, max_tokens=200, timeout=60):
@@ -73,33 +102,52 @@ def generate(instruction, text, max_tokens=200, timeout=60):
     return out["choices"][0]["message"]["content"].strip()
 
 
-def answer_question(chunks_doc, index_doc, question, top_n=3, max_tokens=200):
-    chunk_ids = search(index_doc, question, top_n=top_n)
-    chunks_by_id = {c["chunkId"]: c for c in chunks_doc["chunks"]}
-    context_parts = [chunks_by_id[cid]["text"] for cid in chunk_ids if cid in chunks_by_id]
-    context = "\n\n".join(context_parts)
+def answer_question(index_doc, question, top_n=3, max_tokens=200):
+    top_chunks = tfidf_search(index_doc, question, top_n=top_n)
+    context = "\n\n".join(c["text"] for c in top_chunks)
 
     instruction = (
         "Answer the question using only the context below. "
-        "If the answer isn't in the context, say so.\n\n"
+        "If the answer is not in the context, say so.\n\n"
         f"Context:\n{context}\n\nQuestion: {question}"
     )
     answer_text = generate(instruction, "", max_tokens=max_tokens)
-    return {"question": question, "answer": answer_text, "sourceChunks": chunk_ids}
+
+    citations = [
+        {
+            "documentId": index_doc["documentId"],
+            "fileName": index_doc.get("fileName", ""),
+            "label": make_label(c),
+            "snippet": c["text"][:200],
+        }
+        for c in top_chunks
+    ]
+    return {"answer": answer_text, "citations": citations}
+
+
+def parse_request(event):
+    """Support both direct invoke (dict) and API Gateway proxy (event body as JSON string)."""
+    if "body" in event:
+        body = event["body"]
+        payload = json.loads(body) if isinstance(body, str) else body
+    else:
+        payload = event
+    return payload.get("question"), payload.get("documentId")
 
 
 def lambda_handler(event, context):
-    user_id = event["userId"]
-    document_id = event["documentId"]
-    question = event["question"]
-    chunks_key = event.get("chunksKey", f"processed/{user_id}/{document_id}/chunks.json")
-    index_key = event.get("indexKey", f"processed/{user_id}/{document_id}/index.json")
+    user_id = event.get("userId") or (event.get("requestContext", {}).get("authorizer", {}).get("jwt", {}).get("claims", {}).get("sub"))
+    question, document_id = parse_request(event)
 
-    chunks_obj = s3.get_object(Bucket=BUCKET, Key=chunks_key)
-    chunks_doc = json.loads(chunks_obj["Body"].read())
+    if not question:
+        return {"error": "question is required"}
+    if not document_id:
+        return {"error": "documentId is required"}
 
-    index_obj = s3.get_object(Bucket=BUCKET, Key=index_key)
-    index_doc = json.loads(index_obj["Body"].read())
+    bucket = event.get("bucket", DEFAULT_BUCKET)
+    index_key = f"processed/{user_id}/{document_id}/index.json"
 
-    result = answer_question(chunks_doc, index_doc, question)
-    return result
+    obj = s3.get_object(Bucket=bucket, Key=index_key)
+    index_doc = json.loads(obj["Body"].read())
+
+    return answer_question(index_doc, question)
