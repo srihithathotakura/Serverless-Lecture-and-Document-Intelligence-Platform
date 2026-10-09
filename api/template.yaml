@@ -1,0 +1,236 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: lecdoc HTTP API with Cognito JWT authorization
+
+Parameters:
+  Stage:
+    Type: String
+    AllowedValues: [dev, demo]
+
+Resources:
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub lecdoc-${Stage}-api
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowOrigins:
+          - '*'
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - OPTIONS
+        AllowHeaders:
+          - authorization
+          - content-type
+        MaxAge: 300
+
+  JwtAuthorizer:
+    Type: AWS::ApiGatewayV2::Authorizer
+    Properties:
+      ApiId: !Ref HttpApi
+      Name: !Sub lecdoc-${Stage}-cognito-jwt
+      AuthorizerType: JWT
+      IdentitySource:
+        - '$request.header.Authorization'
+      JwtConfiguration:
+        Audience:
+          - Fn::ImportValue:
+              Fn::Sub: lecdoc-${Stage}-UserPoolClientId
+        Issuer: !Sub
+          - 'https://cognito-idp.${AWS::Region}.amazonaws.com/${PoolId}'
+          - PoolId:
+              Fn::ImportValue:
+                Fn::Sub: lecdoc-${Stage}-UserPoolId
+
+  CreateUploadIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri:
+        Fn::ImportValue:
+          Fn::Sub: lecdoc-${Stage}-CreateUploadFnArn
+      PayloadFormatVersion: '2.0'
+      TimeoutInMillis: 30000
+
+  ListDocumentsIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri:
+        Fn::ImportValue:
+          Fn::Sub: lecdoc-${Stage}-ListDocumentsFnArn
+      PayloadFormatVersion: '2.0'
+      TimeoutInMillis: 30000
+
+  GetDocumentIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri:
+        Fn::ImportValue:
+          Fn::Sub: lecdoc-${Stage}-GetDocumentFnArn
+      PayloadFormatVersion: '2.0'
+      TimeoutInMillis: 30000
+
+  DeleteDocumentIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri:
+        Fn::ImportValue:
+          Fn::Sub: lecdoc-${Stage}-DeleteDocumentFnArn
+      PayloadFormatVersion: '2.0'
+      TimeoutInMillis: 30000
+
+  QaIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri:
+        Fn::ImportValue:
+          Fn::Sub: lecdoc-${Stage}-QaFnArn
+      PayloadFormatVersion: '2.0'
+      TimeoutInMillis: 25000
+
+  SpeakIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri:
+        Fn::ImportValue:
+          Fn::Sub: lecdoc-${Stage}-SpeakFnArn
+      PayloadFormatVersion: '2.0'
+      TimeoutInMillis: 30000
+
+  UploadsRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: 'POST /uploads'
+      AuthorizationType: JWT
+      AuthorizerId: !Ref JwtAuthorizer
+      Target: !Sub integrations/${CreateUploadIntegration}
+
+  ListDocumentsRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: 'GET /documents'
+      AuthorizationType: JWT
+      AuthorizerId: !Ref JwtAuthorizer
+      Target: !Sub integrations/${ListDocumentsIntegration}
+
+  GetDocumentRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: 'GET /documents/{documentId}'
+      AuthorizationType: JWT
+      AuthorizerId: !Ref JwtAuthorizer
+      Target: !Sub integrations/${GetDocumentIntegration}
+
+  DeleteDocumentRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: 'DELETE /documents/{documentId}'
+      AuthorizationType: JWT
+      AuthorizerId: !Ref JwtAuthorizer
+      Target: !Sub integrations/${DeleteDocumentIntegration}
+
+  AskRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: 'POST /ask'
+      AuthorizationType: JWT
+      AuthorizerId: !Ref JwtAuthorizer
+      Target: !Sub integrations/${QaIntegration}
+
+  SpeakRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: 'POST /speak'
+      AuthorizationType: JWT
+      AuthorizerId: !Ref JwtAuthorizer
+      Target: !Sub integrations/${SpeakIntegration}
+
+  CreateUploadInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName:
+        Fn::ImportValue:
+          Fn::Sub: lecdoc-${Stage}-CreateUploadFnArn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*/POST/uploads
+
+  ListDocumentsInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName:
+        Fn::ImportValue:
+          Fn::Sub: lecdoc-${Stage}-ListDocumentsFnArn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*/GET/documents
+
+  GetDocumentInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName:
+        Fn::ImportValue:
+          Fn::Sub: lecdoc-${Stage}-GetDocumentFnArn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*/GET/documents/*
+
+  DeleteDocumentInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName:
+        Fn::ImportValue:
+          Fn::Sub: lecdoc-${Stage}-DeleteDocumentFnArn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*/DELETE/documents/*
+
+  QaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName:
+        Fn::ImportValue:
+          Fn::Sub: lecdoc-${Stage}-QaFnArn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*/POST/ask
+
+  SpeakInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName:
+        Fn::ImportValue:
+          Fn::Sub: lecdoc-${Stage}-SpeakFnArn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*/POST/speak
+
+Outputs:
+  ApiId:
+    Value: !Ref HttpApi
+    Export:
+      Name: !Sub lecdoc-${Stage}-ApiId
+
+  ApiUrl:
+    Value: !GetAtt HttpApi.ApiEndpoint
+    Export:
+      Name: !Sub lecdoc-${Stage}-ApiUrl
