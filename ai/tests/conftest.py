@@ -9,7 +9,6 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # ai/
 
 @pytest.fixture(autouse=True)
 def aws_credentials(monkeypatch):
-    """Moto requires dummy credentials present even when mocking AWS calls."""
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", "testing")
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "testing")
     monkeypatch.setenv("AWS_SECURITY_TOKEN", "testing")
@@ -18,7 +17,6 @@ def aws_credentials(monkeypatch):
 
 
 def load_app(name, rel_path):
-    """Load ai/src/<x>/app.py as a uniquely-named module, re-reading env vars fresh."""
     path = os.path.join(ROOT, rel_path)
     spec = importlib.util.spec_from_file_location(name, path)
     module = importlib.util.module_from_spec(spec)
@@ -45,7 +43,7 @@ def index_app(monkeypatch):
 def summarize_app(monkeypatch):
     monkeypatch.setenv("DATA_BUCKET", "test-bucket")
     monkeypatch.setenv("AWS_REGION", "us-east-1")
-    monkeypatch.setenv("BEDROCK_SSM_PARAM", "/lecdoc/test/bedrock-api-key")
+    monkeypatch.setenv("BEDROCK_KEY_PARAM", "/lecdoc/test/bedrock-api-key")
     monkeypatch.setenv("TEXT_MODEL_ID", "google.gemma-3-4b-it")
     return load_app("summarize_app", "src/summarize/app.py")
 
@@ -54,7 +52,7 @@ def summarize_app(monkeypatch):
 def qa_app(monkeypatch):
     monkeypatch.setenv("DATA_BUCKET", "test-bucket")
     monkeypatch.setenv("AWS_REGION", "us-east-1")
-    monkeypatch.setenv("BEDROCK_SSM_PARAM", "/lecdoc/test/bedrock-api-key")
+    monkeypatch.setenv("BEDROCK_KEY_PARAM", "/lecdoc/test/bedrock-api-key")
     monkeypatch.setenv("TEXT_MODEL_ID", "google.gemma-3-4b-it")
     return load_app("qa_app", "src/qa/app.py")
 

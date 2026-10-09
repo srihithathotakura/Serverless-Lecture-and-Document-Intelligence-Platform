@@ -7,9 +7,10 @@ from moto import mock_aws
 def sample_chunks_doc():
     return {
         "documentId": "doc1",
+        "sourceType": "audio",
         "chunks": [
-            {"chunkId": "c0000", "text": "Photosynthesis converts light energy into chemical energy."},
-            {"chunkId": "c0001", "text": "The Calvin cycle fixes carbon dioxide into glucose."},
+            {"chunkId": "doc1#0001", "text": "Photosynthesis converts light energy into chemical energy."},
+            {"chunkId": "doc1#0002", "text": "The Calvin cycle fixes carbon dioxide into glucose."},
         ],
     }
 
@@ -33,7 +34,7 @@ def test_summarize_chunks_calls_generate_with_combined_text(summarize_app, monke
 
 
 @mock_aws
-def test_lambda_handler_returns_summary_field_only(summarize_app, monkeypatch):
+def test_lambda_handler_returns_summary_and_writes_summary_txt(summarize_app, monkeypatch):
     s3 = boto3.client("s3", region_name="us-east-1")
     s3.create_bucket(Bucket="test-bucket")
     s3.put_object(
@@ -47,6 +48,10 @@ def test_lambda_handler_returns_summary_field_only(summarize_app, monkeypatch):
     result = summarize_app.lambda_handler({"userId": "u1", "documentId": "d1"}, None)
 
     assert result == {"summary": "Mock summary."}
+
+    obj = s3.get_object(Bucket="test-bucket", Key="processed/u1/d1/summary.txt")
+    assert obj["Body"].read().decode() == "Mock summary."
+    assert obj["ContentType"] == "text/plain"
 
 
 def test_api_key_fetches_from_ssm_and_caches(summarize_app, monkeypatch):
@@ -65,4 +70,4 @@ def test_api_key_fetches_from_ssm_and_caches(summarize_app, monkeypatch):
 
     assert key1 == "secret-key-123"
     assert key2 == "secret-key-123"
-    assert calls["count"] == 1  # cached after first call
+    assert calls["count"] == 1
