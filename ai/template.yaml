@@ -27,6 +27,7 @@ Resources:
   ChunkFn:
     Type: AWS::Serverless::Function
     Properties:
+      FunctionName: !Sub 'lecdoc-${Stage}-chunk'
       CodeUri: src/chunk/
       Policies:
         - S3CrudPolicy:
@@ -35,6 +36,7 @@ Resources:
   SummarizeFn:
     Type: AWS::Serverless::Function
     Properties:
+      FunctionName: !Sub 'lecdoc-${Stage}-summarize'
       CodeUri: src/summarize/
       Policies:
         - S3CrudPolicy:
@@ -47,6 +49,7 @@ Resources:
   IndexFn:
     Type: AWS::Serverless::Function
     Properties:
+      FunctionName: !Sub 'lecdoc-${Stage}-index'
       CodeUri: src/index/
       Policies:
         - S3CrudPolicy:
@@ -55,6 +58,7 @@ Resources:
   QaFn:
     Type: AWS::Serverless::Function
     Properties:
+      FunctionName: !Sub 'lecdoc-${Stage}-qa'
       CodeUri: src/qa/
       Policies:
         - S3CrudPolicy:
@@ -67,6 +71,7 @@ Resources:
   SpeakFn:
     Type: AWS::Serverless::Function
     Properties:
+      FunctionName: !Sub 'lecdoc-${Stage}-speak'
       CodeUri: src/speak/
       Policies:
         - S3CrudPolicy:
