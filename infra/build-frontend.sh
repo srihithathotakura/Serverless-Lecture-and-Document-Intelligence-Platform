@@ -6,6 +6,7 @@ STAGE=${1:?usage: build-frontend.sh dev|demo}
 export AWS_DEFAULT_REGION=$(jq -r .region infra/config/$STAGE.json)
 get() { aws cloudformation list-exports \
   --query "Exports[?Name=='lecdoc-$STAGE-$1'].Value" --output text; }
+[ -n "$(get WebBucketName)" ] || { echo "web stack lecdoc-$STAGE-web is not deployed"; exit 1; }
 cat > frontend/app/public/config.js <<CFG
 window.APP_CONFIG = {
   region: "$AWS_DEFAULT_REGION",
