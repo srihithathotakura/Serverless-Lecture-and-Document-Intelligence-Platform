@@ -1,0 +1,56 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: lecdoc HTTP API with Cognito JWT authorization
+
+Parameters:
+  Stage:
+    Type: String
+    AllowedValues: [dev, demo]
+
+Resources:
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub lecdoc-${Stage}-api
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowOrigins:
+          - '*'
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - OPTIONS
+        AllowHeaders:
+          - authorization
+          - content-type
+        MaxAge: 300
+
+  JwtAuthorizer:
+    Type: AWS::ApiGatewayV2::Authorizer
+    Properties:
+      ApiId: !Ref HttpApi
+      Name: !Sub lecdoc-${Stage}-cognito-jwt
+      AuthorizerType: JWT
+      IdentitySource:
+        - '$request.header.Authorization'
+      JwtConfiguration:
+        Audience:
+          - Fn::ImportValue:
+              Fn::Sub: lecdoc-${Stage}-UserPoolClientId
+        Issuer: !Sub
+          - 'https://cognito-idp.${AWS::Region}.amazonaws.com/${PoolId}'
+          - PoolId:
+              Fn::ImportValue:
+                Fn::Sub: lecdoc-${Stage}-UserPoolId
+
+Outputs:
+  ApiId:
+    Value: !Ref HttpApi
+    Export:
+      Name: !Sub lecdoc-${Stage}-ApiId
+
+  ApiUrl:
+    Value: !GetAtt HttpApi.ApiEndpoint
+    Export:
+      Name: !Sub lecdoc-${Stage}-ApiUrl
