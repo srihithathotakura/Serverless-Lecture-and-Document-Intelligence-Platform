@@ -19,11 +19,15 @@ case "$STT_MODEL" in *FILL*|"") echo "Set sttModelId in $CFG (copy it from infra
 echo "Account: $(aws sts get-caller-identity --query Account --output text) Stage: $STAGE"
 
 want() { [ -z "$ONLY" ] || [ "$ONLY" = "$1" ]; }
+# stacks listed in "skipStacks" of infra/config/<stage>.json are not deployed (e.g. web while CloudFront is blocked)
+SKIP=$(jq -r '(.skipStacks // []) | join(" ")' "$CFG")
+skipped() { case " $SKIP " in *" $1 "*) return 0;; esac; return 1; }
 
 cfn() { # name template owner [params...]
   local name=$1 tpl=$2 owner=$3; shift 3
   [ -f "$tpl" ] || { echo "skip $name (no $tpl)"; return 0; }
   want "$name" || return 0
+  if skipped "$name"; then echo "skip $name (skipStacks in $CFG)"; return 0; fi
   aws cloudformation deploy --stack-name "lecdoc-$STAGE-$name" --template-file "$tpl" \
     --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM --no-fail-on-empty-changeset \
     --tags project=lecdoc stage=$STAGE owner=$owner \
@@ -34,6 +38,7 @@ sam_stack() { # name dir owner [params...]
   local name=$1 dir=$2 owner=$3; shift 3
   [ -f "$dir/template.yaml" ] || { echo "skip $name (no $dir/template.yaml)"; return 0; }
   want "$name" || return 0
+  if skipped "$name"; then echo "skip $name (skipStacks in $CFG)"; return 0; fi
   (cd "$dir" && sam build && sam deploy --stack-name "lecdoc-$STAGE-$name" --resolve-s3 \
     --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM --no-confirm-changeset --no-fail-on-empty-changeset \
     --tags "project=lecdoc stage=$STAGE owner=$owner" \
@@ -59,10 +64,10 @@ sam_stack pipeline pipeline m1 SttModelId="$STT_MODEL" MantleBaseUrl="$MANTLE_UR
 cfn api api/template.yaml m4
 cfn web frontend/template.yaml m4
 WEB_BUCKET=$(aws cloudformation list-exports --query "Exports[?Name=='lecdoc-$STAGE-WebBucketName'].Value" --output text)
-if want web && [ -f frontend/app/package.json ] && [ -n "$WEB_BUCKET" ]; then
+if want web && ! skipped web && [ -f frontend/app/package.json ] && [ -n "$WEB_BUCKET" ]; then
   ./infra/build-frontend.sh "$STAGE"
 else
-  echo "skip frontend build (web stack not deployed)"
+  echo "skip frontend build (web stack skipped or not deployed)"
 fi
 API_EXPORT=$(aws cloudformation list-exports --query "Exports[?Name=='lecdoc-$STAGE-ApiId'].Name" --output text)
 if [[ "$API_EXPORT" == *ApiId* ]]; then
