@@ -1,0 +1,6 @@
+function,operation,wall_time_s
+chunk,chunk 4-segment audio doc,1.391
+index,build tfidf index from 4 chunks,1.419
+summarize,summarize 4 chunks via Gemma + write summary.txt,2.808
+qa,answer question with tfidf-ranked 3-chunk context via Gemma,1.918
+speak,read summary.txt synthesize via Polly return presigned url,2.386
