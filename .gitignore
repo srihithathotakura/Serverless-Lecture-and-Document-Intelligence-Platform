@@ -11,3 +11,4 @@ out.json
 frontend/app/public/config.js
 .venv/
 *.pyc
+auth/id_token.txt
