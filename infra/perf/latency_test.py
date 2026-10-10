@@ -42,4 +42,4 @@ with ThreadPoolExecutor(10) as ex:
     for _ in range(5):
         par += list(ex.map(lambda _: call("GET", "/documents"), range(10)))
 report("GET /documents 5 x 10 parallel", par)
-report("POST /ask (includes model call)", [call("POST", "/ask", {"question": "what is this lecture about"}) for _ in range(5)])
+report("POST /ask (includes model call)", [call("POST", "/ask", {"question": "what is object storage and how does a browser upload to it", "documentId": os.environ.get("DOC_ID", "")}) for _ in range(5)])
