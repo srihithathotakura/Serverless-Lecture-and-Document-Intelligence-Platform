@@ -3,7 +3,7 @@
 Method: `API_URL=<ApiUrl export> ID_TOKEN=<cognito id token> python3 infra/perf/latency_test.py`
 Token: aws cognito-idp admin-initiate-auth (ADMIN_USER_PASSWORD_AUTH) for user1@lecdoc.test, exported as ID_TOKEN. For /ask also export DOC_ID of a processed document.
 
-## API latency (fill from the script output, date and stage: ____)
+## API latency (dev account, 2026-10-11, client in India over WSL, new TLS connection per call)
 | test | calls | p50 ms | p95 ms | max ms | errors |
 |---|---|---|---|---|---|
 | GET /documents sequential | 50 | 919 | 1127 | 1183 | 0 |
@@ -15,14 +15,16 @@ Client-side numbers include the network round trip from India to us-east-1 and a
 ## Processing time versus file length (from M1's docs/perf/pipeline-timings.csv)
 | file | length | processing seconds |
 |---|---|---|
-| audio-1min.wav | 1 min | |
-| audio-3min.wav | 3 min | |
-| audio-5min.wav | 5 min | |
-| doc-2pages.pdf | 2 pages | |
-| doc-10pages.pdf | 10 pages | |
-| doc-20pages.pdf | 20 pages | |
+| audio-1min.wav | 1 min | 7.2 |
+| audio-3min.wav | 3 min | 6.9 |
+| audio-5min.wav | 5 min | 10.8 |
+| doc-2pages.pdf | 2 pages | 4.8 |
+| doc-10pages.pdf | 10 pages | 3.0 |
+| doc-20pages.pdf | 20 pages | 3.5 |
 
 Audio time grows with the number of 30-second windows (2 per minute), transcribed two at a time by the Map state. PDF time is dominated by the summary model call, so it grows slowly with page count.
+
+Each file was processed once in the dev account (data from the M1 pipeline-timings.csv; audio-5min.wav is 4.9 minutes long). The first run of each type includes Lambda cold starts, so differences of a few seconds between files are noise. The clear pattern is that audio takes about 7 to 11 seconds and PDFs about 3 to 5 seconds end to end.
 
 ## Cost per document
 Run `python3 infra/perf/cost.py ...` with current prices and M2's token counts.
