@@ -26,6 +26,7 @@ Audio time grows with the number of 30-second windows (2 per minute), transcribe
 Run `python3 infra/perf/cost.py ...` with current prices and M2's token counts.
 | document | speech | text model | polly | infra | total USD |
 |---|---|---|---|---|---|
-| 5-minute lecture | | | | | |
-| 20-page PDF | n/a | | | | |
-Prices checked on (date): ____ from the Bedrock and Polly pricing pages.
+| 5-minute lecture | 0.0007 | 0.0001 | 0.0060 | 0.0007 | 0.0074 |
+| 20-page PDF | n/a | 0.0002 | 0.0060 | 0.0004 | 0.0065 |
+Prices checked on (date): 2026-10-10 from the Bedrock and Polly pricing pages.
+Without the optional Polly summary the totals are about 0.0015 USD (5-minute lecture) and 0.0005 USD (20-page PDF). Speech cost is an upper bound because only audio seconds are logged, not model usage tokens. Token counts come from M2 (5-minute lecture: 1023 in, 263 out; 20-page PDF: 3392 in, 271 out).
