@@ -2,6 +2,7 @@ import json
 import os
 
 import boto3
+from botocore.exceptions import ClientError
 
 s3 = boto3.client("s3", region_name=os.environ.get("AWS_REGION", "us-east-1"))
 polly = boto3.client("polly", region_name=os.environ.get("AWS_REGION", "us-east-1"))
@@ -26,23 +27,41 @@ def parse_request(event):
     return payload.get("documentId")
 
 
+def resp(status, body):
+    return {
+        "statusCode": status,
+        "headers": {"Content-Type": "application/json"},
+        "body": json.dumps(body),
+    }
+
+
 def lambda_handler(event, context):
-    user_id = event.get("userId") or (event.get("requestContext", {}).get("authorizer", {}).get("jwt", {}).get("claims", {}).get("sub"))
+    user_id = event.get("userId") or (
+        event.get("requestContext", {})
+        .get("authorizer", {})
+        .get("jwt", {})
+        .get("claims", {})
+        .get("sub")
+    )
     document_id = parse_request(event)
 
     if not document_id:
-        return {"error": "documentId is required"}
+        return resp(400, {"error": "documentId is required"})
+    if not user_id:
+        return resp(401, {"error": "Unauthorized"})
 
     bucket = event.get("bucket", DEFAULT_BUCKET)
     summary_key = f"processed/{user_id}/{document_id}/summary.txt"
 
     try:
         obj = s3.get_object(Bucket=bucket, Key=summary_key)
-    except s3.exceptions.NoSuchKey:
-        return {"error": "no summary exists for this document"}
+    except ClientError as exc:
+        code = exc.response.get("Error", {}).get("Code", "")
+        if code in ("NoSuchKey", "404", "NotFound"):
+            return resp(404, {"error": "Summary not found"})
+        raise
 
     text = obj["Body"].read().decode()
-
     audio_bytes = synthesize_speech(text)
 
     audio_key = f"processed/{user_id}/{document_id}/summary.mp3"
@@ -59,4 +78,4 @@ def lambda_handler(event, context):
         ExpiresIn=900,
     )
 
-    return {"audioUrl": audio_url, "expiresIn": 900}
+    return resp(200, {"audioUrl": audio_url, "expiresIn": 900})

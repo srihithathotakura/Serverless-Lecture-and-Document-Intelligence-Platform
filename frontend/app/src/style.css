@@ -518,3 +518,108 @@ button:disabled { opacity: .6; cursor: not-allowed; }
   .upload-controls { align-items: stretch; }
   .upload-controls .primary-button { width: 100%; }
 }
+
+
+/* Week 4: Ask panel */
+.ask-card {
+  margin-top: 24px;
+  padding: 24px;
+  border: 1px solid #e4eaf4;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 8px 30px rgba(34, 54, 100, .04);
+}
+
+.ask-card h2 {
+  margin: 0 0 12px;
+  color: #172554;
+  font-size: 19px;
+}
+
+.ask-card > p {
+  color: #7c879b;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.ask-card label {
+  display: block;
+  margin: 16px 0 7px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+#ask-document,
+#ask-question {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid #d7dfec;
+  border-radius: 8px;
+  color: #172554;
+  background: #fff;
+  font: inherit;
+}
+
+#ask-question {
+  resize: vertical;
+  line-height: 1.6;
+}
+
+#ask-button {
+  margin-top: 14px;
+}
+
+#ask-status {
+  margin: 12px 0 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+#ask-status:empty {
+  display: none;
+}
+
+#ask-answer {
+  margin-top: 18px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+#ask-answer h4 {
+  margin-bottom: 8px;
+  color: #172554;
+}
+
+#ask-answer ul {
+  padding-left: 22px;
+}
+
+#ask-answer li {
+  margin-bottom: 14px;
+}
+
+#ask-answer li div {
+  margin-top: 5px;
+  color: #536179;
+  font-size: 14px;
+}
+
+#ask-answer .notfound {
+  color: #7c5b12;
+}
+
+#ask-answer .notice {
+  color: #875b0a;
+}
+
+#ask-answer .answer {
+  color: #172554;
+}
+
+@media (max-width: 600px) {
+  .ask-card {
+    padding: 18px;
+  }
+}

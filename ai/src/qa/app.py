@@ -6,6 +6,7 @@ import urllib.request
 from collections import Counter
 
 import boto3
+from botocore.exceptions import ClientError
 
 s3 = boto3.client("s3", region_name=os.environ.get("AWS_REGION", "us-east-1"))
 ssm = boto3.client("ssm", region_name=os.environ.get("AWS_REGION", "us-east-1"))
@@ -135,19 +136,41 @@ def parse_request(event):
     return payload.get("question"), payload.get("documentId")
 
 
+def resp(status, body):
+    return {
+        "statusCode": status,
+        "headers": {"Content-Type": "application/json"},
+        "body": json.dumps(body),
+    }
+
+
 def lambda_handler(event, context):
-    user_id = event.get("userId") or (event.get("requestContext", {}).get("authorizer", {}).get("jwt", {}).get("claims", {}).get("sub"))
+    user_id = event.get("userId") or (
+        event.get("requestContext", {})
+        .get("authorizer", {})
+        .get("jwt", {})
+        .get("claims", {})
+        .get("sub")
+    )
     question, document_id = parse_request(event)
 
     if not question:
-        return {"error": "question is required"}
+        return resp(400, {"error": "question is required"})
     if not document_id:
-        return {"error": "documentId is required"}
+        return resp(400, {"error": "documentId is required"})
+    if not user_id:
+        return resp(401, {"error": "Unauthorized"})
 
     bucket = event.get("bucket", DEFAULT_BUCKET)
     index_key = f"processed/{user_id}/{document_id}/index.json"
 
-    obj = s3.get_object(Bucket=bucket, Key=index_key)
-    index_doc = json.loads(obj["Body"].read())
+    try:
+        obj = s3.get_object(Bucket=bucket, Key=index_key)
+    except ClientError as exc:
+        code = exc.response.get("Error", {}).get("Code", "")
+        if code in ("NoSuchKey", "404", "NotFound"):
+            return resp(404, {"error": "Document index not found"})
+        raise
 
-    return answer_question(index_doc, question)
+    index_doc = json.loads(obj["Body"].read())
+    return resp(200, answer_question(index_doc, question))
