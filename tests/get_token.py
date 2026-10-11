@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Print a Cognito ID token for a specified stage and test user."""
 import os
 import sys
