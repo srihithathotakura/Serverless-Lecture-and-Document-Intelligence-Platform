@@ -1,3 +1,6 @@
+import { uploadFile } from './upload.js';
+import { refreshList, stopPolling } from './docs.js';
+import { showDetail } from './detail.js';
 import './style.css';
 import {
   signUp,
@@ -151,6 +154,8 @@ async function handleSubmit(event) {
 }
 
 function renderDashboard(email) {
+  stopPolling();
+
   app.innerHTML = `
     <main class="dashboard">
       <header class="topbar">
@@ -160,24 +165,111 @@ function renderDashboard(email) {
           <button id="logout-button" class="secondary-button" type="button">Sign out</button>
         </div>
       </header>
+
       <section class="dashboard-content">
         <h1>Your learning workspace</h1>
-        <p>Welcome back. Your authenticated workspace is ready.</p>
-        <div class="welcome-card">
-          <h2>Welcome to Lectura</h2>
-          <p>Your account is signed in successfully. Document listing, uploads, and question answering will be connected when the API endpoints are available.</p>
-          <p id="api-status" style="margin-top:12px"></p>
-        </div>
+        <p>Upload lectures and documents, track processing, and review their contents.</p>
+
+        <section class="upload-card">
+          <h2>Upload a document</h2>
+          <p>WAV audio (16-bit PCM, up to 5 minutes) or a text PDF (up to 20 pages, no scans). Convert other audio first.</p>
+          <div class="upload-controls">
+            <input id="file-input" type="file" accept=".wav,.pdf">
+            <button id="upload-button" class="primary-button" type="button">Upload</button>
+          </div>
+          <p id="upload-status" role="status" aria-live="polite"></p>
+        </section>
+
+        <section class="documents-card">
+          <div class="section-heading">
+            <h2>Your documents</h2>
+            <button id="refresh-button" class="secondary-button" type="button">Refresh</button>
+          </div>
+          <p id="list-error" class="error" role="status" aria-live="polite"></p>
+          <div class="table-wrapper">
+            <table class="document-table">
+              <thead>
+                <tr>
+                  <th>File name</th>
+                  <th>Type</th>
+                  <th>Status</th>
+                  <th>Processing step</th>
+                  <th>Created</th>
+                </tr>
+              </thead>
+              <tbody id="document-list"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="detail-view" class="detail-card" hidden></section>
       </section>
     </main>`;
 
+  const tbody = document.querySelector('#document-list');
+  const errorEl = document.querySelector('#list-error');
+  const detailBox = document.querySelector('#detail-view');
+  const uploadCard = document.querySelector('.upload-card');
+  const documentsCard = document.querySelector('.documents-card');
+  const fileInput = document.querySelector('#file-input');
+  const uploadButton = document.querySelector('#upload-button');
+  const uploadStatus = document.querySelector('#upload-status');
+
+  const refresh = () => refreshList(tbody, errorEl, openDocument);
+
+  async function openDocument(documentId) {
+    stopPolling();
+    uploadCard.hidden = true;
+    documentsCard.hidden = true;
+    detailBox.hidden = false;
+
+    await showDetail(detailBox, documentId, () => {
+      detailBox.hidden = true;
+      uploadCard.hidden = false;
+      documentsCard.hidden = false;
+      refresh();
+    });
+  }
+
+  document.querySelector('#refresh-button').addEventListener('click', refresh);
+
+  uploadButton.addEventListener('click', async () => {
+    const file = fileInput.files[0];
+
+    if (!file) {
+      uploadStatus.textContent = 'Choose a WAV or PDF file first.';
+      uploadStatus.className = 'error';
+      return;
+    }
+
+    uploadButton.disabled = true;
+    uploadStatus.className = '';
+
+    try {
+      await uploadFile(file, (message) => {
+        uploadStatus.textContent = message;
+        uploadStatus.className = '';
+      });
+
+      await refresh();
+    } catch (error) {
+      uploadStatus.textContent = error?.message || 'Upload failed. Please try again.';
+      uploadStatus.className = 'error';
+    } finally {
+      uploadButton.disabled = false;
+      fileInput.value = '';
+    }
+  });
+
   document.querySelector('#logout-button').addEventListener('click', () => {
+    stopPolling();
     signOut();
     mode = 'signin';
     renderAuth();
   });
-}
 
+  refresh();
+}
 async function initialize() {
   try {
     const user = getCurrentUser();
