@@ -109,18 +109,22 @@ def test_lambda_handler_reads_index_from_s3(qa_app, monkeypatch):
         {"userId": "u1", "documentId": "d1", "question": "What is the Calvin cycle?"}, None
     )
 
-    assert result["answer"] == "Mock answer."
-    assert "citations" in result
+    assert result["statusCode"] == 200
+    body = json.loads(result["body"])
+    assert body["answer"] == "Mock answer."
+    assert "citations" in body
 
 
 def test_lambda_handler_requires_question(qa_app):
     result = qa_app.lambda_handler({"userId": "u1", "documentId": "d1"}, None)
-    assert "error" in result
+    assert result["statusCode"] == 400
+    assert "error" in json.loads(result["body"])
 
 
 def test_lambda_handler_requires_document_id(qa_app):
     result = qa_app.lambda_handler({"userId": "u1", "question": "hi"}, None)
-    assert "error" in result
+    assert result["statusCode"] == 400
+    assert "error" in json.loads(result["body"])
 
 
 def test_lambda_handler_parses_api_gateway_body(qa_app, monkeypatch):
@@ -131,3 +135,16 @@ def test_lambda_handler_parses_api_gateway_body(qa_app, monkeypatch):
     )
     assert question == "hi"
     assert document_id == "d1"
+
+
+@mock_aws
+def test_lambda_handler_returns_404_when_index_missing(qa_app):
+    s3 = boto3.client("s3", region_name="us-east-1")
+    s3.create_bucket(Bucket="test-bucket")
+
+    result = qa_app.lambda_handler(
+        {"userId": "u1", "documentId": "missing", "question": "hello"}, None
+    )
+
+    assert result["statusCode"] == 404
+    assert "error" in json.loads(result["body"])

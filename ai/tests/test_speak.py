@@ -46,9 +46,11 @@ def test_lambda_handler_reads_summary_writes_audio_returns_url(speak_app):
 
     result = speak_app.lambda_handler({"userId": "u1", "documentId": "d1"}, None)
 
-    assert "audioUrl" in result
-    assert result["expiresIn"] == 900
-    assert "summary.mp3" in result["audioUrl"]
+    assert result["statusCode"] == 200
+    body = __import__("json").loads(result["body"])
+    assert "audioUrl" in body
+    assert body["expiresIn"] == 900
+    assert "summary.mp3" in body["audioUrl"]
 
     obj = s3.get_object(Bucket="test-bucket", Key="processed/u1/d1/summary.mp3")
     assert obj["Body"].read() == b"fake-audio-bytes"
@@ -64,12 +66,14 @@ def test_lambda_handler_returns_error_when_no_summary_exists(speak_app):
 
     result = speak_app.lambda_handler({"userId": "u1", "documentId": "missing-doc"}, None)
 
-    assert "error" in result
+    assert result["statusCode"] == 404
+    assert "error" in __import__("json").loads(result["body"])
 
 
 def test_lambda_handler_requires_document_id(speak_app):
     result = speak_app.lambda_handler({"userId": "u1"}, None)
-    assert "error" in result
+    assert result["statusCode"] == 400
+    assert "error" in __import__("json").loads(result["body"])
 
 
 def test_parse_request_api_gateway_body(speak_app):

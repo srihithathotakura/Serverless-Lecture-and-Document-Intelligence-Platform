@@ -1,6 +1,7 @@
 import { uploadFile } from './upload.js';
 import { refreshList, stopPolling } from './docs.js';
 import { showDetail } from './detail.js';
+import { ask, renderAnswer } from './ask.js';
 import './style.css';
 import {
   signUp,
@@ -202,6 +203,20 @@ function renderDashboard(email) {
           </div>
         </section>
 
+        <section class="ask-card">
+          <h2>Ask your documents</h2>
+          <p>Use words that appear in your document. Search is keyword-based.</p>
+          <label for="ask-document">Search in</label>
+          <select id="ask-document" required>
+            <option value="">Select a completed document</option>
+          </select>
+          <label for="ask-question">Your question</label>
+          <textarea id="ask-question" rows="3" placeholder="Ask a question about your documents"></textarea>
+          <button id="ask-button" class="primary-button" type="button">Ask</button>
+          <p id="ask-status" role="status" aria-live="polite"></p>
+          <div id="ask-answer" aria-live="polite"></div>
+        </section>
+
         <section id="detail-view" class="detail-card" hidden></section>
       </section>
     </main>`;
@@ -211,9 +226,74 @@ function renderDashboard(email) {
   const detailBox = document.querySelector('#detail-view');
   const uploadCard = document.querySelector('.upload-card');
   const documentsCard = document.querySelector('.documents-card');
+  const askCard = document.querySelector('.ask-card');
   const fileInput = document.querySelector('#file-input');
   const uploadButton = document.querySelector('#upload-button');
   const uploadStatus = document.querySelector('#upload-status');
+  const askQuestion = document.querySelector('#ask-question');
+  const askDocument = document.querySelector('#ask-document');
+  const askButton = document.querySelector('#ask-button');
+  const askStatus = document.querySelector('#ask-status');
+  const askAnswer = document.querySelector('#ask-answer');
+
+  async function loadAskDocuments() {
+    try {
+      const { documents } = await (await import('./api.js')).api('/documents');
+      const selected = askDocument.value;
+      askDocument.replaceChildren(new Option('Select a completed document', ''));
+
+      for (const doc of documents.filter((item) => item.status === 'DONE')) {
+        askDocument.add(new Option(doc.fileName, doc.documentId));
+      }
+
+      if ([...askDocument.options].some((option) => option.value === selected)) {
+        askDocument.value = selected;
+      }
+    } catch {
+      // The main document list displays its own refresh errors.
+    }
+  }
+
+  askButton.addEventListener('click', async () => {
+    const question = askQuestion.value.trim();
+
+    if (!question) {
+      askStatus.textContent = 'Please type a question.';
+      askStatus.className = 'error';
+      askQuestion.focus();
+      return;
+    }
+
+    if (!askDocument.value) {
+      askStatus.textContent = 'Please select a completed document.';
+      askStatus.className = 'error';
+      askDocument.focus();
+      return;
+    }
+
+    askButton.disabled = true;
+    askStatus.textContent = 'Searching… (this can take up to 30 seconds)';
+    askStatus.className = '';
+    askAnswer.replaceChildren();
+
+    try {
+      const response = await ask(question, askDocument.value);
+      renderAnswer(askAnswer, response);
+      askStatus.textContent = '';
+    } catch (error) {
+      askStatus.className = 'error';
+      if (error?.name === 'TimeoutError' || error?.name === 'AbortError') {
+        askStatus.textContent = 'The request took too long. Try a shorter question.';
+      } else {
+        askStatus.textContent = error?.message || 'Something went wrong. Please try again.';
+      }
+    } finally {
+      askButton.disabled = false;
+    }
+  });
+
+  loadAskDocuments();
+
 
   const refresh = () => refreshList(tbody, errorEl, openDocument);
 
@@ -221,12 +301,14 @@ function renderDashboard(email) {
     stopPolling();
     uploadCard.hidden = true;
     documentsCard.hidden = true;
+    askCard.hidden = true;
     detailBox.hidden = false;
 
     await showDetail(detailBox, documentId, () => {
       detailBox.hidden = true;
       uploadCard.hidden = false;
       documentsCard.hidden = false;
+      askCard.hidden = false;
       refresh();
     });
   }
