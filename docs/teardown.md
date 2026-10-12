@@ -125,3 +125,6 @@ All five must print nothing. Then check Billing for the next day to confirm no n
 ## 11. Re-deploy after a teardown
 
 `export BEDROCK_API_KEY=... ALERT_EMAIL=...` then `./infra/deploy.sh dev`. The deploy script recreates the SSM key. Demo is redeployed by running the GitHub Actions workflow.
+
+## 8. Bedrock key IAM user
+Creating a long-term Bedrock API key also creates an IAM user named BedrockAPIKey-<suffix> in that account. After deleting the key in the Bedrock console, delete that IAM user too (IAM, Users), in both dev and demo.
