@@ -13,7 +13,7 @@ S3 data bucket (private, public access blocked, AES256 encryption, HTTPS-only bu
 `./infra/deploy.sh dev` (or `demo`) stores the Bedrock key in SSM, then deploys the stacks in order, skipping any whose template is missing. `./infra/destroy.sh` empties the buckets and deletes the stacks in reverse order. Stack tags: project, stage, owner. Teardown steps are in docs/teardown.md.
 
 ## 5. CI/CD
-GitHub Actions workflow `main`: job `ci` (ruff, pytest, cfn-lint, secret scan) runs on pull requests and pushes. Job `deploy` runs only after a push to main, needs `ci`, and runs `./infra/deploy.sh demo`. Branch protection on main: pull request, 1 approval, Code Owners review, green `ci`, no force pushes. Secret scanning and push protection are on.
+GitHub Actions workflow `ci.yml`: job `ci` (ruff, pytest, cfn-lint, secret scan) runs on pull requests and pushes. Job `deploy` runs only after a push to main, needs `ci`, and runs `./infra/deploy.sh demo`. Branch protection on main: pull request, 1 approval, Code Owners review, green `ci`, no force pushes. Secret scanning and push protection are on.
 AWS access uses GitHub OIDC: no long-lived AWS keys in GitHub. The deploy role trusts only `repo:<org>/<repo>:*`. It has AdministratorAccess, accepted only because the demo account is dedicated to this project; a production setup would scope it to CloudFormation, IAM, Lambda, S3, DynamoDB, Step Functions and API Gateway actions.
 
 ## 6. Dev versus demo
@@ -31,7 +31,24 @@ CloudWatch dashboard `lecdoc-{stage}`: Lambda errors (15 functions), Lambda dura
 Evidence: dashboard screenshot, alarm email screenshot.
 
 ## 9. Performance and cost
-See docs/perf/latency.md: API latency table, processing time versus length, cost per document (5-minute lecture and 20-page PDF).
+Measured in the dev account on 2026-10-11, because the demo account has no UI stack; the tables are in docs/perf/latency.md.
+
+**API latency.** From a client in India over WSL, with a new TLS connection per call, GET /documents had p50 919 ms and p95 1127 ms over 50 sequential calls, and p50 949 ms and p95 1122 ms over 5 parallel batches of 10, with no errors. Most of this is the network round trip and the TLS handshake: CloudWatch shows API Gateway server-side latency of p50 66 ms and p95 450 ms across all routes. POST /ask, which includes one Gemma call, had p50 1376 ms and p95 1459 ms over 5 calls.
+
+**Processing time versus length.** Each file was processed once. Audio of 1, 3 and 4.9 minutes took 7.2, 6.9 and 10.8 seconds. PDFs of 2, 10 and 20 pages took 4.8, 3.0 and 3.5 seconds. Audio time should grow with the number of 30-second windows, which run two at a time, but single runs include Lambda cold starts, so only the 4.9-minute file clearly stands out. PDF time is dominated by the summary model call and barely grows with page count.
+
+**Cost per document.** Prices were read from the Bedrock and Polly pricing pages on 2026-10-10. A 5-minute lecture costs about $0.0074 with the optional Polly summary and $0.0015 without. A 20-page PDF costs about $0.0065 with Polly and $0.0005 without. The speech figure is an upper bound because only audio seconds are logged, not model usage tokens. Token counts come from M2.
 
 ## 10. Limits
 WAV only (16-bit PCM, up to 5 minutes), text PDFs only (up to 20 pages), keyword (TF-IDF) search only. Fixed 30-second audio windows can cut words at the edges. AdministratorAccess on the demo deploy role is a documented trade-off.
+
+## 11. Testing and evidence
+- ruff, pytest, cfn-lint and the secret scan run on every pull request. To prove the scan works, a test PR containing a fake AWS key string turned `ci` red and was closed unmerged.
+- The alarm path was tested end to end: setting the pipeline alarm state by hand produced the email through the SNS topic. The dev state machine has both successful and failed executions, so the failure path is exercised too.
+- Destroy and redeploy were run in a dev account to confirm that a clean account needs only BEDROCK_API_KEY and ALERT_EMAIL.
+- Evidence screenshots: SSM parameter (SecureString, value hidden), CI log line "Bedrock key stored", CloudFormation stack list, dashboard with real traffic, Step Functions run with the Map state, successful Actions run, and the budget and IAM users in the demo account.
+
+## 12. Challenges and trade-offs
+- The demo account is a separate AWS account with its own 10 USD budget and its own Bedrock key. The key exists only as a GitHub environment secret and in SSM, and its expiry date is checked weekly.
+- CloudFront was not verified in the demo account, so the deploy script reads a skipStacks setting from the stage config and skips the web stack there, without changing any template.
+- Free-plan accounts could not call Transcribe, Textract or Comprehend, so every component was tested on a real account before it was chosen.
